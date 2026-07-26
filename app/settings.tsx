@@ -111,17 +111,17 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>AI Model</Text>
           <View style={styles.card}>
             {Object.values(GEMINI_MODELS).map((model) => {
-              const isSelected = selectedModel === model.id;
+              const isSelected = selectedModel === model.model;
               return (
                 <TouchableOpacity 
-                  key={model.id} 
+                  key={model.model} 
                   style={[styles.modelRow, isSelected && styles.modelRowSelected]}
-                  onPress={() => saveModel(model.id)}
+                  onPress={() => saveModel(model.model)}
                 >
                   <View style={styles.modelRowContent}>
                     <View style={styles.modelHeader}>
-                      <Text style={styles.modelName}>{model.name}</Text>
-                      <ModelBadge modelId={model.id} />
+                      <Text style={styles.modelName}>{model.label}</Text>
+                      <ModelBadge model={model.model} />
                     </View>
                     <Text style={styles.modelDescription}>{model.description}</Text>
                   </View>

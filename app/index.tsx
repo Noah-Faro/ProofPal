@@ -68,7 +68,7 @@ export default function MainScreen() {
     saveSettings({ selectedDepth: newDepth });
   };
 
-  const handleSubjectChange = (subjectId: string) => {
+  const handleSubjectChange = (subjectId: string | undefined) => {
     setSelectedSubjectId(subjectId);
     saveSettings({ selectedSubjectId: subjectId });
   };
@@ -107,7 +107,7 @@ export default function MainScreen() {
       <View style={styles.topBar}>
         <Text style={styles.title}>ProofPal</Text>
         <TouchableOpacity onPress={() => router.push('/settings')}>
-          <ModelBadge modelId={selectedModel} />
+          <ModelBadge model={selectedModel} />
         </TouchableOpacity>
       </View>
 
@@ -116,19 +116,19 @@ export default function MainScreen() {
         <View style={[styles.controlsSection, isLandscapeOrWide && { flex: 1 }]}>
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             <View style={styles.section}>
-              <DropZone onImageLoaded={setProofImageUri} imageUri={proofImageUri} />
+              <DropZone onImageReceived={(uri) => setProofImageUri(uri)} currentImage={proofImageUri} onClear={() => setProofImageUri(undefined)} />
             </View>
             
             <View style={styles.section}>
-              <DepthPicker selectedDepth={depth} onSelectDepth={handleDepthChange} />
+              <DepthPicker selectedDepth={depth} onDepthChange={handleDepthChange} />
             </View>
             
             <View style={styles.section}>
-              <SubjectPicker selectedSubjectId={selectedSubjectId} onSelectSubject={handleSubjectChange} />
+              <SubjectPicker selectedSubjectId={selectedSubjectId} onSubjectChange={handleSubjectChange} />
             </View>
             
             <View style={styles.section}>
-              <ExerciseContextPanel context={exerciseContext} onChangeContext={setExerciseContext} />
+              <ExerciseContextPanel exerciseContext={exerciseContext} onUpdate={setExerciseContext} />
             </View>
             
             <TouchableOpacity 
