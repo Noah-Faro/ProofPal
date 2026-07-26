@@ -8,11 +8,12 @@ import {
   StyleSheet,
   SafeAreaView,
   Alert,
+  TextInput,
 } from 'react-native';
 import { getSubjectsByCategory, getSubjectById } from '../models/subjects';
 import { SubjectCategory, MathSubject } from '../models/types';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
-import { loadCustomSubjects, addCustomSubject } from '../utilities/settings';
+import { loadCustomSubjects, addCustomSubject, loadCustomCategories, addCustomCategory } from '../utilities/settings';
 
 /**
  * Props for the {@link SubjectPicker} component.
@@ -38,22 +39,34 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
 }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [customSubjects, setCustomSubjects] = useState<MathSubject[]>([]);
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
+  
+  const [newDomainModalVisible, setNewDomainModalVisible] = useState(false);
+  const [newDomainName, setNewDomainName] = useState('');
+  const [newDomainCategory, setNewDomainCategory] = useState<string>('');
 
   useEffect(() => {
     loadCustomSubjects().then(setCustomSubjects).catch(console.error);
+    loadCustomCategories().then(setCustomCategories).catch(console.error);
   }, []);
 
   const selectedSubject = selectedSubjectId
     ? getSubjectById(selectedSubjectId) || customSubjects.find(s => s.id === selectedSubjectId)
     : undefined;
   
-  const subjectsByCategory = { ...getSubjectsByCategory() };
-  if (customSubjects.length > 0) {
-    subjectsByCategory['OTHER' as SubjectCategory] = [
-      ...(subjectsByCategory['OTHER' as SubjectCategory] || []),
-      ...customSubjects,
-    ];
-  }
+  const subjectsByCategory: Record<string, MathSubject[]> = { ...getSubjectsByCategory() };
+  
+  customCategories.forEach(cat => {
+    if (!subjectsByCategory[cat]) subjectsByCategory[cat] = [];
+  });
+
+  customSubjects.forEach(subj => {
+    const cat = subj.category as string;
+    if (!subjectsByCategory[cat]) {
+      subjectsByCategory[cat] = [];
+    }
+    subjectsByCategory[cat].push(subj);
+  });
 
   const handleSelect = (subjectId: string | undefined) => {
     if (disabled) return;
@@ -61,22 +74,17 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
     setModalVisible(false);
   };
 
-  const handleAddDomain = () => {
-    Alert.prompt('New Domain', 'Enter the name of the new math domain:', [
+  const handleAddCategory = () => {
+    Alert.prompt('New Category', 'Enter the name of the new category:', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Add',
         onPress: async (name?: string) => {
           if (name?.trim()) {
-            const newSubj: MathSubject = {
-              id: `custom_${Date.now()}`,
-              name: name.trim(),
-              category: 'OTHER' as SubjectCategory,
-            };
+            const newCat = name.trim();
             try {
-              await addCustomSubject(newSubj);
-              setCustomSubjects(prev => [...prev, newSubj]);
-              handleSelect(newSubj.id);
+              await addCustomCategory(newCat);
+              setCustomCategories(prev => prev.includes(newCat) ? prev : [...prev, newCat]);
             } catch (e) {
               console.error(e);
             }
@@ -84,6 +92,28 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
         },
       }
     ]);
+  };
+
+  const handleSaveNewDomain = async () => {
+    if (newDomainName.trim() && newDomainCategory) {
+      const newSubj: MathSubject = {
+        id: `custom_${Date.now()}`,
+        name: newDomainName.trim(),
+        category: newDomainCategory,
+      };
+      try {
+        await addCustomSubject(newSubj);
+        setCustomSubjects(prev => [...prev, newSubj]);
+        handleSelect(newSubj.id);
+        setNewDomainModalVisible(false);
+        setNewDomainName('');
+        setNewDomainCategory('');
+      } catch (e) {
+        console.error(e);
+      }
+    } else {
+      Alert.alert('Error', 'Please enter a name and select a category.');
+    }
   };
 
   return (
@@ -167,7 +197,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
                 <View style={styles.divider} />
 
                 {/* Categorized Subject List */}
-                {(Object.keys(subjectsByCategory) as SubjectCategory[]).map((category) => {
+                {Object.keys(subjectsByCategory).map((category) => {
                   const subjects = subjectsByCategory[category];
                   if (!subjects || subjects.length === 0) return null;
 
@@ -205,9 +235,72 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
 
                 <TouchableOpacity 
                   style={styles.addDomainButton} 
-                  onPress={handleAddDomain}
+                  onPress={() => setNewDomainModalVisible(true)}
                 >
                   <Text style={styles.addDomainButtonText}>+ Add New Domain</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.addDomainButton, { marginTop: 0, marginBottom: SPACING.lg }]} 
+                  onPress={handleAddCategory}
+                >
+                  <Text style={styles.addDomainButtonText}>+ Add New Category</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </SafeAreaView>
+        </View>
+      </Modal>
+
+      {/* New Domain Modal */}
+      <Modal
+        visible={newDomainModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setNewDomainModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <SafeAreaView style={styles.modalContentContainer}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Add New Domain</Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setNewDomainModalVisible(false)}
+                >
+                  <Text style={styles.closeButtonText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView contentContainerStyle={styles.scrollBody}>
+                <Text style={styles.inputLabel}>Domain Name</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={newDomainName}
+                  onChangeText={setNewDomainName}
+                  placeholder="e.g. Topology"
+                  placeholderTextColor={COLORS.textMuted}
+                />
+                
+                <Text style={[styles.inputLabel, { marginTop: SPACING.md }]}>Select Category</Text>
+                {Object.keys(subjectsByCategory).map(cat => (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[
+                      styles.categoryOptionRow,
+                      newDomainCategory === cat && styles.selectedRow
+                    ]}
+                    onPress={() => setNewDomainCategory(cat)}
+                  >
+                    <Text style={[
+                      styles.subjectName,
+                      newDomainCategory === cat && styles.selectedSubjectName
+                    ]}>{cat}</Text>
+                    {newDomainCategory === cat && <Text style={styles.checkmark}>✓</Text>}
+                  </TouchableOpacity>
+                ))}
+                
+                <TouchableOpacity style={styles.saveDomainButton} onPress={handleSaveNewDomain}>
+                  <Text style={styles.saveDomainButtonText}>Save Domain</Text>
                 </TouchableOpacity>
               </ScrollView>
             </View>
@@ -399,6 +492,42 @@ const styles = StyleSheet.create({
     color: COLORS.primaryLight,
     fontSize: FONT_SIZES.sm + 1,
     fontWeight: 'bold',
+  },
+  textInput: {
+    backgroundColor: COLORS.bgSurface,
+    color: COLORS.textPrimary,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    fontSize: FONT_SIZES.md,
+  },
+  inputLabel: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
+    marginBottom: SPACING.xs,
+  },
+  categoryOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    marginBottom: 4,
+  },
+  saveDomainButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    alignItems: 'center',
+    marginTop: SPACING.xl,
+  },
+  saveDomainButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: FONT_SIZES.md,
   },
 });
 

@@ -62,7 +62,7 @@ export enum SubjectCategory {
 export interface MathSubject {
   id: string;
   name: string;
-  category: SubjectCategory;
+  category: SubjectCategory | string;
 }
 
 /**

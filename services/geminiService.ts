@@ -5,7 +5,8 @@ import {
   type File as GeminiFile,
   type Part,
 } from '@google/genai';
-import { File as ExpoFile } from 'expo-file-system';
+import * as ExpoFile from 'expo-file-system';
+import { File as ExpoFileClass } from 'expo-file-system';
 import { GeminiModel, PedagogicalDepth } from '../models/types';
 import {
   type AppError,
@@ -157,7 +158,7 @@ async function uploadAndProcessPdf(
   assertPdfAttachment(attachment);
   assertNotAborted(signal);
 
-  const localFile = new ExpoFile(attachment.uri);
+  const localFile = new ExpoFileClass(attachment.uri);
   const fileSize = attachment.size ?? localFile.size;
   if (fileSize > MAX_PDF_BYTES) {
     throw new ProofPalError('FILE_TOO_LARGE', 'Course PDFs must be 50 MB or smaller.', false);
@@ -395,7 +396,8 @@ export async function sendFollowUpMessage(
   message: string,
   currentFeedback: string,
   previousChat: { role: 'user' | 'model'; text: string }[],
-  config: { model: GeminiModel; depth: PedagogicalDepth }
+  config: { model: GeminiModel; depth: PedagogicalDepth },
+  imageUri?: string
 ): Promise<string> {
   const apiKey = await getApiKey();
   if (!apiKey?.trim()) {
@@ -420,9 +422,18 @@ Current Feedback Provided to User:
 ${currentFeedback}
 Pedagogical Depth: ${config.depth}`;
 
+    const userParts: Part[] = [];
+    if (message) {
+      userParts.push({ text: message });
+    }
+    if (imageUri) {
+      const base64 = await ExpoFile.readAsStringAsync(imageUri, { encoding: 'base64' });
+      userParts.push({ inlineData: { data: base64, mimeType: 'image/jpeg' } });
+    }
+
     const contents = [
       ...history,
-      { role: 'user', parts: [{ text: message }] }
+      { role: 'user', parts: userParts }
     ];
 
     const response = await ai.models.generateContent({

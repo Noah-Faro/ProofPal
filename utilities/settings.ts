@@ -185,3 +185,22 @@ export async function addCustomSubject(subject: MathSubject): Promise<void> {
   subjects.push(subject);
   await AsyncStorage.setItem(CUSTOM_SUBJECTS_KEY, JSON.stringify(subjects));
 }
+
+export const CUSTOM_CATEGORIES_KEY = 'proofpal_custom_categories';
+
+export async function loadCustomCategories(): Promise<string[]> {
+  try {
+    const json = await AsyncStorage.getItem(CUSTOM_CATEGORIES_KEY);
+    return json ? JSON.parse(json) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function addCustomCategory(category: string): Promise<void> {
+  const categories = await loadCustomCategories();
+  if (!categories.includes(category)) {
+    categories.push(category);
+    await AsyncStorage.setItem(CUSTOM_CATEGORIES_KEY, JSON.stringify(categories));
+  }
+}

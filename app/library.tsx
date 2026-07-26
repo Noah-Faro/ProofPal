@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, FlatList, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, FlatList, Alert, Modal, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
+import { MATH_SUBJECTS } from '../models/subjects';
+import { loadCustomSubjects } from '../utilities/settings';
+import { MathSubject } from '../models/types';
 
 interface LibraryBook {
   id: string;
@@ -20,6 +23,9 @@ const STORAGE_KEY = 'proofpal_library';
 export default function LibraryScreen() {
   const router = useRouter();
   const [books, setBooks] = useState<LibraryBook[]>([]);
+  const [domainModalVisible, setDomainModalVisible] = useState(false);
+  const [allSubjects, setAllSubjects] = useState<MathSubject[]>([]);
+  const [pendingFile, setPendingFile] = useState<any>(null);
 
   useEffect(() => {
     let isActive = true;
@@ -30,6 +36,11 @@ export default function LibraryScreen() {
         }
       })
       .catch((e) => console.error('Failed to load books', e));
+      
+    loadCustomSubjects().then(custom => {
+      if (isActive) setAllSubjects([...MATH_SUBJECTS, ...custom]);
+    });
+
     return () => {
       isActive = false;
     };
@@ -55,35 +66,32 @@ export default function LibraryScreen() {
         return;
       }
 
-      const file = result.assets[0];
-
-      Alert.prompt(
-        'Math Domain',
-        'Enter the math domain/field for this book (e.g., Linear Algebra, Calculus):',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Save',
-            onPress: (domain?: string) => {
-              const newBook: LibraryBook = {
-                id: Date.now().toString(),
-                name: file.name,
-                domain: domain || 'General',
-                subjectId: domain || 'General',
-                uri: file.uri,
-                size: file.size,
-                addedAt: Date.now(),
-              };
-              saveBooks([newBook, ...books]);
-            },
-          },
-        ],
-        'plain-text'
-      );
+      setPendingFile(result.assets[0]);
+      
+      const custom = await loadCustomSubjects();
+      setAllSubjects([...MATH_SUBJECTS, ...custom]);
+      setDomainModalVisible(true);
+      
     } catch (e) {
       console.error('Failed to pick document', e);
       Alert.alert('Error', 'Failed to pick the document.');
     }
+  };
+
+  const handleSelectDomain = (subject: MathSubject) => {
+    if (!pendingFile) return;
+    const newBook: LibraryBook = {
+      id: Date.now().toString(),
+      name: pendingFile.name,
+      domain: subject.name,
+      subjectId: subject.id,
+      uri: pendingFile.uri,
+      size: pendingFile.size,
+      addedAt: Date.now(),
+    };
+    saveBooks([newBook, ...books]);
+    setDomainModalVisible(false);
+    setPendingFile(null);
   };
 
   const handleDelete = (id: string) => {
@@ -150,6 +158,47 @@ export default function LibraryScreen() {
           contentContainerStyle={styles.listContent}
         />
       )}
+
+      {/* Domain Selection Modal */}
+      <Modal
+        visible={domainModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => {
+          setDomainModalVisible(false);
+          setPendingFile(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <SafeAreaView style={styles.modalContentContainer}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select Math Domain</Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => {
+                    setDomainModalVisible(false);
+                    setPendingFile(null);
+                  }}
+                >
+                  <Text style={styles.closeButtonText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView contentContainerStyle={styles.scrollBody}>
+                {allSubjects.map((subj) => (
+                  <TouchableOpacity
+                    key={subj.id}
+                    style={styles.subjectRow}
+                    onPress={() => handleSelectDomain(subj)}
+                  >
+                    <Text style={styles.subjectName}>{subj.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </SafeAreaView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -253,5 +302,69 @@ const styles = StyleSheet.create({
     color: COLORS.error,
     fontSize: FONT_SIZES.sm,
     fontWeight: 'bold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 13, 35, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.md,
+  },
+  modalContentContainer: {
+    width: '100%',
+    maxWidth: 540,
+    maxHeight: '85%',
+  },
+  modalCard: {
+    backgroundColor: COLORS.bgCard,
+    borderRadius: BORDER_RADIUS.xl,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  modalTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: BORDER_RADIUS.full,
+    backgroundColor: COLORS.bgSurface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeButtonText: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '700',
+  },
+  scrollBody: {
+    padding: SPACING.lg,
+  },
+  subjectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: SPACING.sm + 2,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    marginBottom: 4,
+  },
+  subjectName: {
+    fontSize: FONT_SIZES.sm + 1,
+    color: COLORS.textPrimary,
+    fontWeight: '500',
   },
 });

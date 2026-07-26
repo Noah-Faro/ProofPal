@@ -68,7 +68,7 @@ export default function HistoryScreen() {
               <Text style={styles.badgeText}>{item.verdict ? item.verdict.toUpperCase() : 'REVIEWED'}</Text>
             </View>
             <TouchableOpacity onPress={() => handleDeleteItem(item.id)} style={styles.deleteIcon}>
-              <Text style={{color: COLORS.error, fontSize: 18}}>🗑️</Text>
+              <Text style={{color: COLORS.error, fontSize: 18}}>✕</Text>
             </TouchableOpacity>
           </View>
         </View>

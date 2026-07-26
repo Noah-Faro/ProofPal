@@ -8,17 +8,20 @@ export interface MarkdownRendererProps {
   style?: ViewStyle;
 }
 
-/** Convert stray inequality symbols outside math delimiters to LaTeX. */
 function sanitizeLatex(text: string): string {
   // Don't touch content inside $...$ or $$...$$
-  return text.replace(/(?<![\$])(?:<=|≤)/g, '$\\le$')
-             .replace(/(?<![\$])(?:>=|≥)/g, '$\\ge$')
-             .replace(/(?<![\$])(?:!=|≠)/g, '$\\neq$');
+  return text.replace(/(?<![\$])(?:<=|≤)/g, '$\\\\le$')
+             .replace(/(?<![\$])(?:>=|≥)/g, '$\\\\ge$')
+             .replace(/(?<![\$])(?:!=|≠)/g, '$\\\\neq$')
+             .replace(/(?<![\$])(?:->|→)/g, '$\\\\rightarrow$')
+             .replace(/(?<![\$])(?:=>|⇒)/g, '$\\\\Rightarrow$')
+             .replace(/(?<![\$])(?:~|≈)/g, '$\\\\approx$');
 }
 
 /** Remove external image directives before rendering untrusted AI output natively. */
 export function sanitizeFeedbackMarkdown(content: string): string {
-  let cleaned = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '');
+  let cleaned = content.replace(/\\/g, '\\\\');
+  cleaned = cleaned.replace(/<thinking>[\s\S]*?<\/thinking>/g, '');
   cleaned = cleaned.replace(/!\[[^\]]*\]\([^\s)]+(?:\s+[^)]*)?\)/g, '[Image omitted]');
   cleaned = sanitizeLatex(cleaned);
   return cleaned;

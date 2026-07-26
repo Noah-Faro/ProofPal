@@ -115,14 +115,15 @@ export const MATH_SUBJECTS: MathSubject[] = [
 /**
  * Returns subjects grouped by their category.
  */
-export function getSubjectsByCategory(): Record<SubjectCategory, MathSubject[]> {
+export function getSubjectsByCategory(): Record<string, MathSubject[]> {
   return MATH_SUBJECTS.reduce((acc, subject) => {
-    if (!acc[subject.category]) {
-      acc[subject.category] = [];
+    const cat = subject.category as string;
+    if (!acc[cat]) {
+      acc[cat] = [];
     }
-    acc[subject.category].push(subject);
+    acc[cat].push(subject);
     return acc;
-  }, {} as Record<SubjectCategory, MathSubject[]>);
+  }, {} as Record<string, MathSubject[]>);
 }
 
 /**

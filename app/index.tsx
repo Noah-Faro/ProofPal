@@ -13,7 +13,12 @@ import {
   Switch,
   PanResponder,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import { Redirect, useFocusEffect, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DropZone } from '../components/DropZone';
@@ -67,44 +72,111 @@ export default function MainScreen() {
   const [chatHistory, setChatHistory] = useState<{role: 'user'|'model', text: string}[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
+  const [chatImageUri, setChatImageUri] = useState<string | null>(null);
   const requestId = useRef(0);
   const controllerRef = useRef<AbortController | null>(null);
   const mounted = useRef(true);
   const hydratedPreferences = useRef<Pick<AppSettings, 'selectedModel' | 'selectedDepth' | 'selectedSubjectId'> | null>(null);
+  const chatScrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 100);
+    }
+  }, [chatHistory]);
 
   // Bottom sheet animation
   const sheetAnim = useMemo(() => new Animated.Value(0), []);
 
+  const sheetHeight = height * 0.9;
+  const snapExpanded = 0;
+  const snapHalf = height * 0.4;
+  const snapClosed = height * 0.9;
+
+  const lastSheetY = useRef(snapHalf);
+
   const openSheet = () => {
     setShowFeedback(true);
-    Animated.spring(sheetAnim, { toValue: 0, useNativeDriver: true }).start();
+    lastSheetY.current = snapHalf;
+    sheetAnim.setOffset(0);
+    sheetAnim.setValue(snapClosed);
+    Animated.spring(sheetAnim, { toValue: snapHalf, useNativeDriver: true }).start();
   };
 
   const closeSheet = () => {
-    setShowFeedback(false);
-    sheetAnim.setValue(0);
+    Animated.timing(sheetAnim, { toValue: snapClosed, duration: 250, useNativeDriver: true }).start(() => {
+      setShowFeedback(false);
+    });
   };
 
   const panResponder = useMemo(
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 10,
+        onPanResponderGrant: () => {
+          sheetAnim.setOffset(lastSheetY.current);
+          sheetAnim.setValue(0);
+        },
         onPanResponderMove: (_, gestureState) => {
-          if (gestureState.dy > 0) {
-            sheetAnim.setValue(-gestureState.dy);
+          let newY = gestureState.dy;
+          if (lastSheetY.current + newY < 0) {
+            newY = -lastSheetY.current + (newY + lastSheetY.current) * 0.2;
           }
+          sheetAnim.setValue(newY);
         },
         onPanResponderRelease: (_, gestureState) => {
-          if (gestureState.dy > 100) {
-            setShowFeedback(false);
-            sheetAnim.setValue(0);
+          sheetAnim.flattenOffset();
+          const currentY = lastSheetY.current + gestureState.dy;
+          const velocityY = gestureState.vy;
+          const predictedY = currentY + velocityY * 150;
+
+          let nextSnap = snapHalf;
+          const distExpanded = Math.abs(predictedY - snapExpanded);
+          const distHalf = Math.abs(predictedY - snapHalf);
+          const distClosed = Math.abs(predictedY - snapClosed);
+
+          if (distClosed < distHalf && distClosed < distExpanded) {
+            nextSnap = snapClosed;
+          } else if (distExpanded < distHalf) {
+            nextSnap = snapExpanded;
           } else {
-            Animated.spring(sheetAnim, { toValue: 0, useNativeDriver: true }).start();
+            nextSnap = snapHalf;
+          }
+
+          if (nextSnap === snapClosed) {
+            closeSheet();
+          } else {
+            Animated.spring(sheetAnim, { toValue: nextSnap, useNativeDriver: true }).start();
+            lastSheetY.current = nextSnap;
           }
         },
       }),
-    [sheetAnim],
+    [sheetAnim, height],
   );
+
+  const [availableBooks, setAvailableBooks] = useState<{id: string, name: string, uri: string, subjectId?: string}[]>([]);
+  const [selectedBookId, setSelectedBookId] = useState<string | undefined>();
+
+  useEffect(() => {
+    if (selectedSubjectId) {
+      AsyncStorage.getItem('proofpal_library').then(json => {
+        if (json && mounted.current) {
+          const books = JSON.parse(json);
+          const matching = books.filter((b: any) => b.subjectId === selectedSubjectId);
+          setAvailableBooks(matching);
+          // If there's exactly one book, auto-select it
+          if (matching.length === 1 && !selectedBookId) {
+            setSelectedBookId(matching[0].id);
+            setExerciseContext(prev => ({ ...prev, coursePdf: { uri: matching[0].uri, name: matching[0].name, mimeType: 'application/pdf' } }));
+          }
+        }
+      });
+    } else {
+      setAvailableBooks([]);
+      setSelectedBookId(undefined);
+      setExerciseContext(prev => ({ ...prev, coursePdf: undefined }));
+    }
+  }, [selectedSubjectId]);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -195,10 +267,20 @@ export default function MainScreen() {
     setStage(undefined);
   };
 
+  const handlePickChatImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      setChatImageUri(result.assets[0].uri);
+    }
+  };
+
   const handleSendChat = async (text: string) => {
-    if (!text.trim() || chatLoading || !result) return;
+    if ((!text.trim() && !chatImageUri) || chatLoading || !result) return;
     
-    const newMessage = { role: 'user' as const, text };
+    const newMessage = { role: 'user' as const, text: text || (chatImageUri ? '[Image attached]' : '') };
     setChatHistory(prev => [...prev, newMessage]);
     setChatLoading(true);
     
@@ -207,9 +289,11 @@ export default function MainScreen() {
         text, 
         result.feedbackMarkdown, 
         chatHistory, 
-        { model: selectedModel, depth }
+        { model: selectedModel, depth },
+        chatImageUri || undefined
       );
       setChatHistory(prev => [...prev, { role: 'model', text: responseText }]);
+      setChatImageUri(null);
     } catch (e) {
       setError(toAppError(e));
     } finally {
@@ -289,8 +373,6 @@ export default function MainScreen() {
   }
   if (!settings.hasCompletedOnboarding) return <Redirect href="/onboarding" />;
 
-  const sheetHeight = Math.max(height * 0.7, 400);
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
@@ -316,6 +398,46 @@ export default function MainScreen() {
 
         <View style={styles.section}>
           <SubjectPicker selectedSubjectId={selectedSubjectId} onSubjectChange={handleSubjectChange} disabled={isLoading} />
+          {availableBooks.length > 0 && (
+            <View style={{ marginTop: SPACING.md }}>
+              <Text style={{ color: COLORS.textSecondary, fontSize: FONT_SIZES.sm, fontWeight: '600', marginBottom: SPACING.xs, marginLeft: SPACING.xs }}>
+                Reference Book
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.sm, paddingHorizontal: SPACING.xs }}>
+                {availableBooks.map(book => {
+                  const isSelected = selectedBookId === book.id;
+                  return (
+                    <TouchableOpacity
+                      key={book.id}
+                      activeOpacity={0.7}
+                      disabled={isLoading}
+                      onPress={() => {
+                        if (isSelected) {
+                          setSelectedBookId(undefined);
+                          setExerciseContext(prev => ({ ...prev, coursePdf: undefined }));
+                        } else {
+                          setSelectedBookId(book.id);
+                          setExerciseContext(prev => ({ ...prev, coursePdf: { uri: book.uri, name: book.name, mimeType: 'application/pdf' } }));
+                        }
+                      }}
+                      style={{
+                        paddingHorizontal: SPACING.md,
+                        paddingVertical: SPACING.sm,
+                        borderRadius: BORDER_RADIUS.full,
+                        borderWidth: 1,
+                        borderColor: isSelected ? COLORS.primary : 'rgba(255,255,255,0.1)',
+                        backgroundColor: isSelected ? 'rgba(99,102,241,0.15)' : COLORS.bgSurface,
+                      }}
+                    >
+                      <Text style={{ color: isSelected ? COLORS.primaryLight : COLORS.textPrimary, fontSize: FONT_SIZES.sm, fontWeight: isSelected ? 'bold' : '500' }}>
+                        {book.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -391,46 +513,64 @@ export default function MainScreen() {
               </TouchableOpacity>
             </View>
             <View style={styles.sheetBody}>
-              <FeedbackPanel result={result} isLoading={isLoading} stage={stage} />
-              {result && (
-                <View style={styles.chatContainer}>
-                  <ScrollView style={styles.chatScroll} contentContainerStyle={styles.chatScrollContent}>
-                    {chatHistory.map((msg, index) => (
-                      <View key={index} style={[styles.chatBubble, msg.role === 'user' ? styles.chatBubbleUser : styles.chatBubbleModel]}>
-                        <Text style={[styles.chatText, msg.role === 'user' ? styles.chatTextUser : styles.chatTextModel]}>
-                          {msg.text}
-                        </Text>
-                      </View>
-                    ))}
-                    {chatLoading && (
-                      <ActivityIndicator style={{marginTop: 8}} color={COLORS.primaryLight} />
-                    )}
-                  </ScrollView>
-                  <View style={styles.chatInputRow}>
-                    <TextInput
-                      style={styles.chatInput}
-                      placeholder="Ask a follow-up question..."
-                      placeholderTextColor={COLORS.textMuted}
-                      value={chatInput}
-                      onChangeText={setChatInput}
-                      onSubmitEditing={() => {
-                        handleSendChat(chatInput);
-                        setChatInput('');
-                      }}
-                    />
-                    <TouchableOpacity
-                      style={styles.chatSendButton}
-                      onPress={() => {
-                        handleSendChat(chatInput);
-                        setChatInput('');
-                      }}
-                      disabled={chatLoading || !chatInput.trim()}
-                    >
-                      <Text style={styles.chatSendButtonText}>Send</Text>
-                    </TouchableOpacity>
-                  </View>
+              <KeyboardAvoidingView 
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+                style={{ flex: 1 }}
+              >
+                <View style={{ flex: 1 }}>
+                  <FeedbackPanel result={result} isLoading={isLoading} stage={stage} />
                 </View>
-              )}
+                {result && (
+                  <View style={styles.chatContainer}>
+                    <ScrollView ref={chatScrollRef} style={styles.chatScroll} contentContainerStyle={styles.chatScrollContent}>
+                      {chatHistory.map((msg, index) => (
+                        <View key={index} style={[styles.chatBubble, msg.role === 'user' ? styles.chatBubbleUser : styles.chatBubbleModel]}>
+                          <MarkdownRenderer content={msg.text} />
+                        </View>
+                      ))}
+                      {chatLoading && (
+                        <ActivityIndicator style={{marginTop: 8}} color={COLORS.primaryLight} />
+                      )}
+                    </ScrollView>
+                    
+                    {chatImageUri && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginHorizontal: SPACING.md, marginBottom: SPACING.sm }}>
+                        <Image source={{ uri: chatImageUri }} style={{ width: 50, height: 50, borderRadius: 8, marginRight: 8 }} />
+                        <TouchableOpacity onPress={() => setChatImageUri(null)} style={{ backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12, padding: 4 }}>
+                          <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                    
+                    <View style={styles.chatInputRow}>
+                      <TouchableOpacity onPress={handlePickChatImage} style={{ padding: SPACING.xs }}>
+                        <Text style={{ fontSize: 20 }}>📷</Text>
+                      </TouchableOpacity>
+                      <TextInput
+                        style={styles.chatInput}
+                        placeholder="Ask a follow-up question..."
+                        placeholderTextColor={COLORS.textMuted}
+                        value={chatInput}
+                        onChangeText={setChatInput}
+                        onSubmitEditing={() => {
+                          handleSendChat(chatInput);
+                          setChatInput('');
+                        }}
+                      />
+                      <TouchableOpacity
+                        style={styles.chatSendButton}
+                        onPress={() => {
+                          handleSendChat(chatInput);
+                          setChatInput('');
+                        }}
+                        disabled={chatLoading || (!chatInput.trim() && !chatImageUri)}
+                      >
+                        <Text style={styles.chatSendButtonText}>Send</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </KeyboardAvoidingView>
             </View>
           </Animated.View>
         </View>
