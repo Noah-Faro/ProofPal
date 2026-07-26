@@ -29,7 +29,7 @@ export default function OnboardingScreen() {
         
         // Save default settings and onboarding status
         const defaultSettings = { 
-          selectedModel: GeminiModel.FLASH_20, 
+          selectedModel: GeminiModel.FLASH_36, 
           selectedDepth: PedagogicalDepth.GUIDE, 
           selectedSubjectId: undefined, 
           hasCompletedOnboarding: true 
@@ -46,6 +46,18 @@ export default function OnboardingScreen() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSkip = async () => {
+    // Save default settings and onboarding status without an API key
+    const defaultSettings = { 
+      selectedModel: GeminiModel.FLASH_36, 
+      selectedDepth: PedagogicalDepth.GUIDE, 
+      selectedSubjectId: undefined, 
+      hasCompletedOnboarding: true 
+    };
+    await AsyncStorage.setItem('proofpal_settings', JSON.stringify(defaultSettings));
+    router.replace('/');
   };
 
   const openAIStudio = () => {
@@ -119,6 +131,14 @@ export default function OnboardingScreen() {
           ) : (
             <Text style={styles.buttonText}>Validate & Continue</Text>
           )}
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.skipButton}
+          onPress={handleSkip}
+          disabled={isLoading}
+        >
+          <Text style={styles.skipButtonText}>Skip for now (App will be view-only)</Text>
         </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -225,5 +245,15 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: FONT_SIZES.lg,
     fontWeight: 'bold',
+  },
+  skipButton: {
+    padding: SPACING.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: SPACING.sm,
+  },
+  skipButtonText: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.md,
   },
 });

@@ -29,6 +29,8 @@ export interface DepthInfo {
  * Available Gemini models.
  */
 export enum GeminiModel {
+  FLASH_36 = 'gemini-3.6-flash',
+  PRO_31 = 'gemini-3.1-pro',
   FLASH_20 = 'gemini-2.0-flash',
   FLASH_15 = 'gemini-1.5-flash',
   PRO_15 = 'gemini-1.5-pro',

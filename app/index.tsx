@@ -24,7 +24,7 @@ export default function MainScreen() {
   const [error, setError] = useState<string | null>(null);
   
   const [depth, setDepth] = useState<PedagogicalDepth>(PedagogicalDepth.GUIDE);
-  const [selectedModel, setSelectedModel] = useState<GeminiModel>(GeminiModel.FLASH_20);
+  const [selectedModel, setSelectedModel] = useState<GeminiModel>(GeminiModel.FLASH_36);
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | undefined>();
   const [exerciseContext, setExerciseContext] = useState<ExerciseContext>({});
 
