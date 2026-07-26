@@ -4,8 +4,7 @@ import { useRouter } from 'expo-router';
 import { validateApiKey } from '../services/geminiService';
 import { saveApiKey } from '../services/secureStorage';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PedagogicalDepth, GeminiModel } from '../models/types';
+import { updateAppSettings } from '../utilities/settings';
 
 export default function OnboardingScreen() {
   const [apiKey, setApiKey] = useState('');
@@ -27,14 +26,7 @@ export default function OnboardingScreen() {
       if (isValid) {
         await saveApiKey(apiKey);
         
-        // Save default settings and onboarding status
-        const defaultSettings = { 
-          selectedModel: GeminiModel.FLASH_36, 
-          selectedDepth: PedagogicalDepth.GUIDE, 
-          selectedSubjectId: undefined, 
-          hasCompletedOnboarding: true 
-        };
-        await AsyncStorage.setItem('proofpal_settings', JSON.stringify(defaultSettings));
+        await updateAppSettings({ hasCompletedOnboarding: true });
         
         router.replace('/');
       } else {
@@ -49,15 +41,14 @@ export default function OnboardingScreen() {
   };
 
   const handleSkip = async () => {
-    // Save default settings and onboarding status without an API key
-    const defaultSettings = { 
-      selectedModel: GeminiModel.FLASH_36, 
-      selectedDepth: PedagogicalDepth.GUIDE, 
-      selectedSubjectId: undefined, 
-      hasCompletedOnboarding: true 
-    };
-    await AsyncStorage.setItem('proofpal_settings', JSON.stringify(defaultSettings));
-    router.replace('/');
+    try {
+      // Keep existing preferences, but record that the user elected to use the app without a key.
+      await updateAppSettings({ hasCompletedOnboarding: true });
+      router.replace('/');
+    } catch (e) {
+      setError('Unable to save setup. Please try again.');
+      console.error(e);
+    }
   };
 
   const openAIStudio = () => {
@@ -77,7 +68,7 @@ export default function OnboardingScreen() {
           </View>
 
         <View style={styles.instructionsContainer}>
-          <Text style={styles.instructionsTitle}>Let's get set up</Text>
+          <Text style={styles.instructionsTitle}>{'Let\'s get set up'}</Text>
           
           <View style={styles.stepCard}>
             <Text style={styles.stepNumber}>1</Text>
@@ -90,12 +81,12 @@ export default function OnboardingScreen() {
           
           <View style={styles.stepCard}>
             <Text style={styles.stepNumber}>2</Text>
-            <Text style={styles.stepText}>Click "Get API key" in the left sidebar</Text>
+            <Text style={styles.stepText}>{'Click "Get API key" in the left sidebar'}</Text>
           </View>
           
           <View style={styles.stepCard}>
             <Text style={styles.stepNumber}>3</Text>
-            <Text style={styles.stepText}>Click "Create API key" and copy it</Text>
+            <Text style={styles.stepText}>{'Click "Create API key" and copy it'}</Text>
           </View>
           
           <View style={styles.stepCard}>

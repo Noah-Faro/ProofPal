@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiKey, deleteApiKey } from '../services/secureStorage';
 import { GEMINI_MODELS } from '../models/geminiModels';
 import { GeminiModel } from '../models/types';
 import { ModelBadge } from '../components/ModelBadge';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
+import { loadAppSettings, markOnboardingIncomplete, updateAppSettings } from '../utilities/settings';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -14,39 +14,36 @@ export default function SettingsScreen() {
   const [apiKeyPreview, setApiKeyPreview] = useState<string>('Not set');
 
   useEffect(() => {
-    loadSettings();
-    loadApiKeyPreview();
-  }, []);
+    let isActive = true;
 
-  const loadSettings = async () => {
-    try {
-      const settingsJson = await AsyncStorage.getItem('proofpal_settings');
-      if (settingsJson) {
-        const settings = JSON.parse(settingsJson);
-        if (settings.selectedModel) {
+    void loadAppSettings()
+      .then((settings) => {
+        if (isActive) {
           setSelectedModel(settings.selectedModel);
         }
-      }
-    } catch (e) {
-      console.error('Failed to load settings', e);
-    }
-  };
+      })
+      .catch((e) => console.error('Failed to load settings', e));
 
-  const loadApiKeyPreview = async () => {
-    const key = await getApiKey();
-    if (key) {
-      setApiKeyPreview(`${key.substring(0, 8)}...${key.substring(key.length - 4)}`);
-    } else {
-      setApiKeyPreview('Not set');
-    }
-  };
+    void getApiKey()
+      .then((key) => {
+        if (!isActive) {
+          return;
+        }
+        setApiKeyPreview(
+          key ? `${key.substring(0, 8)}...${key.substring(key.length - 4)}` : 'Not set',
+        );
+      })
+      .catch((e) => console.error('Failed to load API key preview', e));
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   const saveModel = async (model: GeminiModel) => {
     setSelectedModel(model);
     try {
-      const currentSettingsJson = await AsyncStorage.getItem('proofpal_settings');
-      const currentSettings = currentSettingsJson ? JSON.parse(currentSettingsJson) : {};
-      await AsyncStorage.setItem('proofpal_settings', JSON.stringify({ ...currentSettings, selectedModel: model }));
+      await updateAppSettings({ selectedModel: model });
     } catch (e) {
       console.error('Failed to save settings', e);
     }
@@ -61,8 +58,14 @@ export default function SettingsScreen() {
         { 
           text: "Change Key", 
           onPress: async () => {
-            await deleteApiKey();
-            router.replace('/onboarding');
+            try {
+              await deleteApiKey();
+              await markOnboardingIncomplete();
+              router.replace('/onboarding');
+            } catch (e) {
+              console.error('Failed to reset API key onboarding state', e);
+              Alert.alert('Unable to change API key', 'Please try again.');
+            }
           } 
         }
       ]
@@ -79,15 +82,14 @@ export default function SettingsScreen() {
           text: "Delete", 
           style: "destructive",
           onPress: async () => {
-            await deleteApiKey();
             try {
-              const currentSettingsJson = await AsyncStorage.getItem('proofpal_settings');
-              const currentSettings = currentSettingsJson ? JSON.parse(currentSettingsJson) : {};
-              await AsyncStorage.setItem('proofpal_settings', JSON.stringify({ ...currentSettings, hasCompletedOnboarding: false }));
+              await deleteApiKey();
+              await markOnboardingIncomplete();
+              router.replace('/onboarding');
             } catch (e) {
-              console.error(e);
+              console.error('Failed to delete API key', e);
+              Alert.alert('Unable to delete API key', 'Please try again.');
             }
-            router.replace('/onboarding');
           } 
         }
       ]

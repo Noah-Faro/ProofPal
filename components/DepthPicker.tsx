@@ -3,156 +3,120 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ScrollView,
   StyleSheet,
+  useWindowDimensions,
 } from 'react-native';
 import { DEPTH_LEVELS } from '../models/depthLevels';
 import { PedagogicalDepth } from '../models/types';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
 
-/**
- * Props for the {@link DepthPicker} component.
- */
 export interface DepthPickerProps {
-  /** The currently active pedagogical depth level */
   selectedDepth: PedagogicalDepth;
-  /** Callback fired when the user selects a new depth level */
   onDepthChange: (depth: PedagogicalDepth) => void;
+  disabled?: boolean;
 }
 
-/**
- * DepthPicker renders a horizontal segmented control displaying the 5 pedagogical depth levels.
- *
- * Each level allows the student to customize how much assistance the AI provides,
- * ranging from basic verification (Explore) to full solution walkthroughs (Solve).
- */
+/** A compact, touch-friendly five-level segmented control for iPad split view. */
 export const DepthPicker: React.FC<DepthPickerProps> = ({
   selectedDepth,
   onDepthChange,
+  disabled = false,
 }) => {
-  // Find metadata for currently selected depth
-  const selectedInfo = DEPTH_LEVELS.find((d) => d.level === selectedDepth) || DEPTH_LEVELS[0];
+  const { width } = useWindowDimensions();
+  const compact = width < 520;
+  const selectedInfo = DEPTH_LEVELS.find((item) => item.level === selectedDepth) ?? DEPTH_LEVELS[0];
 
   return (
     <View style={styles.container}>
       <Text style={styles.headerLabel}>HELP LEVEL</Text>
-      
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        <View style={styles.segmentedControl}>
-          {DEPTH_LEVELS.map((item) => {
-            const isSelected = item.level === selectedDepth;
-            const activeColor = item.color || COLORS.primary;
-
-            return (
-              <TouchableOpacity
-                key={item.level}
-                activeOpacity={0.8}
-                onPress={() => onDepthChange(item.level)}
+      <View style={styles.segmentedControl} accessibilityRole="radiogroup">
+        {DEPTH_LEVELS.map((item) => {
+          const isSelected = item.level === selectedDepth;
+          const activeColor = item.color || COLORS.primary;
+          return (
+            <TouchableOpacity
+              key={item.level}
+              activeOpacity={0.75}
+              disabled={disabled}
+              onPress={() => onDepthChange(item.level)}
+              style={[
+                styles.segment,
+                isSelected
+                  ? [styles.segmentSelected, { backgroundColor: activeColor }]
+                  : styles.segmentUnselected,
+                disabled && styles.disabled,
+              ]}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: isSelected, disabled }}
+              accessibilityLabel={`${item.label} help level`}
+            >
+              {!compact && <Text style={styles.segmentIcon}>{item.icon}</Text>}
+              <Text
                 style={[
-                  styles.segment,
-                  isSelected
-                    ? [styles.segmentSelected, { backgroundColor: activeColor }]
-                    : styles.segmentUnselected,
+                  styles.segmentLabel,
+                  compact && styles.segmentLabelCompact,
+                  isSelected ? styles.segmentLabelSelected : styles.segmentLabelUnselected,
                 ]}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isSelected }}
-                accessibilityLabel={`${item.label} depth level`}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
               >
-                <Text style={styles.segmentIcon}>{item.icon}</Text>
-                <Text
-                  style={[
-                    styles.segmentLabel,
-                    isSelected ? styles.segmentLabelSelected : styles.segmentLabelUnselected,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {item.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </ScrollView>
+                {item.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
-      {/* Selected Depth Description Callout */}
-      {selectedInfo && (
-        <View style={[styles.descriptionCard, { borderColor: selectedInfo.color }]}>
-          <View style={[styles.badgeDot, { backgroundColor: selectedInfo.color }]} />
-          <Text style={styles.descriptionText}>
-            <Text style={styles.descriptionHighlight}>{selectedInfo.icon} {selectedInfo.label}: </Text>
-            {selectedInfo.description}
-          </Text>
-        </View>
-      )}
+      <View style={[styles.descriptionCard, { borderColor: selectedInfo.color }]}>
+        <View style={[styles.badgeDot, { backgroundColor: selectedInfo.color }]} />
+        <Text style={styles.descriptionText}>
+          <Text style={styles.descriptionHighlight}>{selectedInfo.label}: </Text>
+          {selectedInfo.description}
+        </Text>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    width: '100%',
-    marginVertical: SPACING.sm,
-  },
+  container: { width: '100%', marginVertical: SPACING.sm },
   headerLabel: {
     fontSize: FONT_SIZES.xs,
     fontWeight: '700',
     color: COLORS.textMuted,
     letterSpacing: 1.2,
     marginBottom: SPACING.xs,
-    textTransform: 'uppercase',
-  },
-  scrollContent: {
-    paddingVertical: SPACING.xs,
   },
   segmentedControl: {
     flexDirection: 'row',
+    width: '100%',
+    minHeight: 52,
+    padding: 4,
     backgroundColor: COLORS.bgCard,
     borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.xs,
-    gap: SPACING.xs,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  segment: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm + 2,
-    borderRadius: BORDER_RADIUS.md,
-    gap: SPACING.xs + 2,
-    minWidth: 105,
-  },
-  segmentSelected: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  segmentUnselected: {
-    backgroundColor: COLORS.bgSurface,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
   },
-  segmentIcon: {
-    fontSize: FONT_SIZES.md,
+  segment: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+    borderRadius: BORDER_RADIUS.md,
+    gap: 3,
   },
-  segmentLabel: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: '600',
-  },
-  segmentLabelSelected: {
-    color: '#ffffff',
-    fontWeight: '700',
-  },
-  segmentLabelUnselected: {
-    color: COLORS.textSecondary,
-  },
+  segmentSelected: { elevation: 2 },
+  segmentUnselected: { backgroundColor: COLORS.bgSurface },
+  segmentIcon: { fontSize: FONT_SIZES.sm },
+  segmentLabel: { fontSize: FONT_SIZES.xs, fontWeight: '600', textAlign: 'center' },
+  segmentLabelCompact: { fontSize: 11 },
+  segmentLabelSelected: { color: '#ffffff', fontWeight: '700' },
+  segmentLabelUnselected: { color: COLORS.textSecondary },
+  disabled: { opacity: 0.45 },
   descriptionCard: {
     marginTop: SPACING.sm,
     backgroundColor: COLORS.bgCard,
@@ -164,21 +128,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACING.sm,
   },
-  badgeDot: {
-    width: 8,
-    height: 8,
-    borderRadius: BORDER_RADIUS.full,
-  },
-  descriptionText: {
-    flex: 1,
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    lineHeight: FONT_SIZES.sm * 1.4,
-  },
-  descriptionHighlight: {
-    color: COLORS.textPrimary,
-    fontWeight: '700',
-  },
+  badgeDot: { width: 8, height: 8, borderRadius: BORDER_RADIUS.full },
+  descriptionText: { flex: 1, fontSize: FONT_SIZES.sm, color: COLORS.textSecondary, lineHeight: 19 },
+  descriptionHighlight: { color: COLORS.textPrimary, fontWeight: '700' },
 });
 
 export default DepthPicker;

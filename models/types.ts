@@ -30,10 +30,8 @@ export interface DepthInfo {
  */
 export enum GeminiModel {
   FLASH_36 = 'gemini-3.6-flash',
-  PRO_31 = 'gemini-3.1-pro',
-  FLASH_20 = 'gemini-2.0-flash',
-  FLASH_15 = 'gemini-1.5-flash',
-  PRO_15 = 'gemini-1.5-pro',
+  PRO_31_PREVIEW = 'gemini-3.1-pro-preview',
+  FLASH_35_LITE = 'gemini-3.5-flash-lite',
 }
 
 /**
@@ -68,40 +66,11 @@ export interface MathSubject {
 }
 
 /**
- * Contextual details for an exercise (all optional).
- */
-export interface ExerciseContext {
-  reference?: string;        // e.g., 'Exercise 4.2b'
-  sourceText?: string;       // typed/pasted exercise statement
-  sourceImageUri?: string;   // photo of the exercise from textbook
-}
-
-/**
- * Full configuration for a proof check request sent to the AI.
- */
-export interface ProofCheckRequest {
-  proofImageBase64: string;
-  depth: PedagogicalDepth;
-  model: GeminiModel;
-  subject?: MathSubject;
-  exerciseContext?: ExerciseContext;
-}
-
-/**
- * The result of a proof check returned by the system.
- */
-export interface ProofCheckResult {
-  response: string;          // Raw markdown+LaTeX response from the AI
-  model: GeminiModel;
-  depth: PedagogicalDepth;
-  timestamp: number;
-  isCorrect?: boolean;       // Parsed from response if possible
-}
-
-/**
  * App settings persisted across user sessions.
  */
 export interface AppSettings {
+  /** Increment when the serialized settings shape or normalization rules change. */
+  settingsVersion: number;
   selectedModel: GeminiModel;
   selectedDepth: PedagogicalDepth;
   selectedSubjectId?: string;

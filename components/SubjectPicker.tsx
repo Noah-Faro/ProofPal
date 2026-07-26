@@ -20,6 +20,7 @@ export interface SubjectPickerProps {
   selectedSubjectId?: string;
   /** Callback triggered when a subject is selected or cleared */
   onSubjectChange: (subjectId: string | undefined) => void;
+  disabled?: boolean;
 }
 
 /**
@@ -31,6 +32,7 @@ export interface SubjectPickerProps {
 export const SubjectPicker: React.FC<SubjectPickerProps> = ({
   selectedSubjectId,
   onSubjectChange,
+  disabled = false,
 }) => {
   const [modalVisible, setModalVisible] = useState(false);
 
@@ -38,6 +40,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
   const subjectsByCategory = getSubjectsByCategory();
 
   const handleSelect = (subjectId: string | undefined) => {
+    if (disabled) return;
     onSubjectChange(subjectId);
     setModalVisible(false);
   };
@@ -47,6 +50,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
       {/* Selector Trigger Button */}
       <TouchableOpacity
         activeOpacity={0.8}
+        disabled={disabled}
         onPress={() => setModalVisible(true)}
         style={[
           styles.triggerButton,
@@ -54,6 +58,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
         ]}
         accessibilityRole="button"
         accessibilityLabel="Select Math Subject"
+        accessibilityState={{ disabled }}
       >
         <Text style={styles.triggerIcon}>
           {selectedSubject ? '📐' : '➕'}

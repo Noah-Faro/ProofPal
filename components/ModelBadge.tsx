@@ -17,6 +17,7 @@ export interface ModelBadgeProps {
   model: GeminiModel;
   /** Optional callback fired when pressing the badge (e.g., to open model selection modal) */
   onPress?: () => void;
+  disabled?: boolean;
 }
 
 /**
@@ -27,6 +28,7 @@ export interface ModelBadgeProps {
 export const ModelBadge: React.FC<ModelBadgeProps> = ({
   model,
   onPress,
+  disabled = false,
 }) => {
   const modelInfo = getModelInfo(model);
   const badgeText = modelInfo?.badge || model;
@@ -43,9 +45,11 @@ export const ModelBadge: React.FC<ModelBadgeProps> = ({
     return (
       <TouchableOpacity
         activeOpacity={0.7}
+        disabled={disabled}
         onPress={onPress}
         style={styles.touchableWrapper}
         accessibilityRole="button"
+        accessibilityState={{ disabled }}
         accessibilityLabel={`Active model: ${modelInfo?.label || model}. Tap to change settings.`}
       >
         {content}
