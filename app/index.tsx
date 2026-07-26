@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -47,7 +47,7 @@ function toAppError(error: unknown): AppError {
 }
 
 export default function MainScreen() {
-  const { width, height } = useWindowDimensions();
+  const { height } = useWindowDimensions();
   const router = useRouter();
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [proofImage, setProofImage] = useState<LocalAttachment | undefined>();
@@ -68,24 +68,7 @@ export default function MainScreen() {
   const hydratedPreferences = useRef<Pick<AppSettings, 'selectedModel' | 'selectedDepth' | 'selectedSubjectId'> | null>(null);
 
   // Bottom sheet animation
-  const sheetAnim = useRef(new Animated.Value(0)).current;
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 10,
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          sheetAnim.setValue(-gestureState.dy);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 100) {
-          closeSheet();
-        } else {
-          Animated.spring(sheetAnim, { toValue: 0, useNativeDriver: true }).start();
-        }
-      },
-    }),
-  ).current;
+  const sheetAnim = useMemo(() => new Animated.Value(0), []);
 
   const openSheet = () => {
     setShowFeedback(true);
@@ -96,6 +79,27 @@ export default function MainScreen() {
     setShowFeedback(false);
     sheetAnim.setValue(0);
   };
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 10,
+        onPanResponderMove: (_, gestureState) => {
+          if (gestureState.dy > 0) {
+            sheetAnim.setValue(-gestureState.dy);
+          }
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          if (gestureState.dy > 100) {
+            setShowFeedback(false);
+            sheetAnim.setValue(0);
+          } else {
+            Animated.spring(sheetAnim, { toValue: 0, useNativeDriver: true }).start();
+          }
+        },
+      }),
+    [sheetAnim],
+  );
 
   const loadSettings = useCallback(async () => {
     try {
@@ -135,11 +139,6 @@ export default function MainScreen() {
       controllerRef.current?.abort();
     };
   }, []);
-
-  // Auto-open feedback sheet when result arrives
-  useEffect(() => {
-    if (result) openSheet();
-  }, [result]);
 
   const clearFeedback = () => {
     setResult(null);
@@ -227,6 +226,7 @@ export default function MainScreen() {
       });
       if (mounted.current && requestId.current === currentRequest) {
         setResult(checkResult);
+        openSheet();
         // Save to history
         const entry: HistoryEntry = {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,

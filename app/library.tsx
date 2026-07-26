@@ -21,19 +21,18 @@ export default function LibraryScreen() {
   const [books, setBooks] = useState<LibraryBook[]>([]);
 
   useEffect(() => {
-    loadBooks();
+    let isActive = true;
+    void AsyncStorage.getItem(STORAGE_KEY)
+      .then((data) => {
+        if (isActive && data) {
+          setBooks(JSON.parse(data));
+        }
+      })
+      .catch((e) => console.error('Failed to load books', e));
+    return () => {
+      isActive = false;
+    };
   }, []);
-
-  const loadBooks = async () => {
-    try {
-      const data = await AsyncStorage.getItem(STORAGE_KEY);
-      if (data) {
-        setBooks(JSON.parse(data));
-      }
-    } catch (e) {
-      console.error('Failed to load books', e);
-    }
-  };
 
   const saveBooks = async (newBooks: LibraryBook[]) => {
     try {
