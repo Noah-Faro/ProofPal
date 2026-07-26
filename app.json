@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "ProofPal",
+    "slug": "proofpal",
+    "scheme": "proofpal",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "requireFullScreen": false,
+      "bundleIdentifier": "com.proofpal.app",
+      "infoPlist": {
+        "UIRequiresFullScreen": false
+      }
+    },
+    "android": null,
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-status-bar"
+    ]
+  }
+}
