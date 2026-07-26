@@ -37,8 +37,6 @@ const markdownStyle: MarkdownStyle = {
   link: { color: COLORS.primaryLight },
   math: { color: COLORS.textPrimary, backgroundColor: COLORS.bgSurface, padding: SPACING.sm },
   inlineMath: { color: COLORS.textPrimary },
-  list_item: { color: COLORS.textPrimary },
-  bullet_list: { color: COLORS.textPrimary },
 };
 
 export function MarkdownRenderer({ content, style }: MarkdownRendererProps) {

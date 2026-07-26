@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, FlatList, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+
 import { loadHistory, clearHistory, deleteHistoryEntry } from '../utilities/settings';
 import { HistoryEntry } from '../models/types';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
@@ -68,7 +68,7 @@ export default function HistoryScreen() {
               <Text style={styles.badgeText}>{item.verdict ? item.verdict.toUpperCase() : 'REVIEWED'}</Text>
             </View>
             <TouchableOpacity onPress={() => handleDeleteItem(item.id)} style={styles.deleteIcon}>
-              <Ionicons name="trash-outline" size={20} color={COLORS.error} />
+              <Text style={{color: COLORS.error, fontSize: 18}}>🗑️</Text>
             </TouchableOpacity>
           </View>
         </View>
