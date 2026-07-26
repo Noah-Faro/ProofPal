@@ -33,7 +33,7 @@ export async function validateApiKey(apiKey: string): Promise<boolean> {
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey.trim());
-    const model = genAI.getGenerativeModel({ model: GeminiModel.FLASH_25 });
+    const model = genAI.getGenerativeModel({ model: GeminiModel.FLASH_20 });
     const result = await model.generateContent('Test connection');
     const response = await result.response;
     return Boolean(response && response.text());

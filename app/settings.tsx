@@ -10,7 +10,7 @@ import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const [selectedModel, setSelectedModel] = useState<GeminiModel>(GeminiModel.FLASH_25);
+  const [selectedModel, setSelectedModel] = useState<GeminiModel>(GeminiModel.FLASH_20);
   const [apiKeyPreview, setApiKeyPreview] = useState<string>('Not set');
 
   useEffect(() => {

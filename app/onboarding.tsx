@@ -29,7 +29,7 @@ export default function OnboardingScreen() {
         
         // Save default settings and onboarding status
         const defaultSettings = { 
-          selectedModel: GeminiModel.FLASH_25, 
+          selectedModel: GeminiModel.FLASH_20, 
           selectedDepth: PedagogicalDepth.GUIDE, 
           selectedSubjectId: undefined, 
           hasCompletedOnboarding: true 

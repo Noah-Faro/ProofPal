@@ -5,22 +5,22 @@ import { GeminiModel, ModelInfo } from './types';
  */
 export const GEMINI_MODELS: ModelInfo[] = [
   {
-    model: GeminiModel.FLASH_25,
-    label: 'Gemini 2.5 Flash',
-    badge: '⚡ Flash',
-    description: 'Fast responses, generous free tier. Best for most proofs.',
-  },
-  {
-    model: GeminiModel.PRO_25,
-    label: 'Gemini 2.5 Pro',
-    badge: '🧠 Pro',
-    description: 'Deep reasoning for complex proofs. Slower, stricter limits.',
-  },
-  {
     model: GeminiModel.FLASH_20,
     label: 'Gemini 2.0 Flash',
-    badge: '⚡⚡ Lite',
-    description: 'Ultra-fast, very generous limits. Good for quick checks.',
+    badge: '⚡ 2.0 Flash',
+    description: 'Fast responses, generous limits. Best for most proofs.',
+  },
+  {
+    model: GeminiModel.FLASH_15,
+    label: 'Gemini 1.5 Flash',
+    badge: '⚡ 1.5 Flash',
+    description: 'Extremely fast and reliable for standard checks.',
+  },
+  {
+    model: GeminiModel.PRO_15,
+    label: 'Gemini 1.5 Pro',
+    badge: '🧠 1.5 Pro',
+    description: 'Deep reasoning for complex proofs. Higher quality analysis.',
   },
 ];
 
