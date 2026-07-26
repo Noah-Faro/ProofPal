@@ -38,10 +38,10 @@ export default function OnboardingScreen() {
         
         router.replace('/');
       } else {
-        setError("Invalid API key. Please check and try again.");
+        setError("Invalid API key. The server returned a blank response.");
       }
-    } catch (e) {
-      setError("An error occurred while validating. Please try again.");
+    } catch (e: any) {
+      setError(`Error: ${e.message || String(e)}`);
       console.error(e);
     } finally {
       setIsLoading(false);

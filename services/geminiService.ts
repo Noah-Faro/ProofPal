@@ -38,9 +38,9 @@ export async function validateApiKey(apiKey: string): Promise<boolean> {
       contents: 'Test connection',
     });
     return Boolean(response && response.text);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Gemini API key validation failed:', error);
-    return false;
+    throw new Error(`Validation failed: ${error.message || String(error)}`);
   }
 }
 
