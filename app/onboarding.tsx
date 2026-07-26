@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Linking, ScrollView, SafeAreaView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Linking, ScrollView, SafeAreaView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { validateApiKey } from '../services/geminiService';
 import { saveApiKey } from '../services/secureStorage';
@@ -54,11 +54,15 @@ export default function OnboardingScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Welcome to ProofPal</Text>
-          <Text style={styles.subtitle}>Your AI study buddy for math proofs</Text>
-        </View>
+      <KeyboardAvoidingView 
+        style={styles.container} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          <View style={styles.header}>
+            <Text style={styles.title}>Welcome to ProofPal</Text>
+            <Text style={styles.subtitle}>Your AI study buddy for math proofs</Text>
+          </View>
 
         <View style={styles.instructionsContainer}>
           <Text style={styles.instructionsTitle}>Let's get set up</Text>
@@ -116,7 +120,8 @@ export default function OnboardingScreen() {
             <Text style={styles.buttonText}>Validate & Continue</Text>
           )}
         </TouchableOpacity>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
