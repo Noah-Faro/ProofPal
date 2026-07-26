@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, Part } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { GeminiModel, ProofCheckRequest, ProofCheckResult, PedagogicalDepth } from '../models/types';
 import { buildSystemPrompt, buildUserMessage } from './promptBuilder';
 import { getApiKey } from './secureStorage';
@@ -32,11 +32,12 @@ export async function validateApiKey(apiKey: string): Promise<boolean> {
   }
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey.trim());
-    const model = genAI.getGenerativeModel({ model: GeminiModel.FLASH_20 });
-    const result = await model.generateContent('Test connection');
-    const response = await result.response;
-    return Boolean(response && response.text());
+    const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+    const response = await ai.models.generateContent({
+      model: GeminiModel.FLASH_20,
+      contents: 'Test connection',
+    });
+    return Boolean(response && response.text);
   } catch (error) {
     console.error('Gemini API key validation failed:', error);
     return false;
@@ -66,7 +67,7 @@ export async function checkProof(request: ProofCheckRequest): Promise<ProofCheck
     exerciseContext: request.exerciseContext,
   });
 
-  const parts: Part[] = [
+  const parts: any[] = [
     { text: userMessage },
     {
       inlineData: {
@@ -91,23 +92,22 @@ export async function checkProof(request: ProofCheckRequest): Promise<ProofCheck
   }
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey.trim());
-    const model = genAI.getGenerativeModel({
-      model: request.model,
-      systemInstruction: systemPrompt,
-    });
+    const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
 
-    const result = await model.generateContent({
+    const response = await ai.models.generateContent({
+      model: request.model,
       contents: [
         {
           role: 'user',
           parts,
         },
       ],
+      config: {
+        systemInstruction: systemPrompt,
+      }
     });
 
-    const response = await result.response;
-    const responseText = response.text();
+    const responseText = response.text;
 
     if (!responseText) {
       throw new Error('Empty response received from Gemini API.');
