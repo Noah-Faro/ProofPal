@@ -6,7 +6,7 @@ import {
   type Part,
 } from '@google/genai';
 import { File as ExpoFile } from 'expo-file-system';
-import { GeminiModel } from '../models/types';
+import { GeminiModel, PedagogicalDepth } from '../models/types';
 import {
   type AppError,
   type LocalAttachment,
@@ -363,6 +363,9 @@ function toProofPalError(error: unknown, fallbackMessage = 'ProofPal could not e
   }
 
   const message = error instanceof Error ? error.message.toLowerCase() : '';
+  if (message.includes('503') || message.includes('overloaded') || message.includes('busy')) {
+    return new ProofPalError('API_ERROR' as any, 'Gemini is currently busy. Please try again in a moment.', true, 'retry');
+  }
   if (message.includes('timeout') || message.includes('timed out')) {
     return new ProofPalError('TIMEOUT', 'The request took too long. Check your connection and try again.', true, 'retry');
   }
@@ -386,4 +389,57 @@ function toProofPalError(error: unknown, fallbackMessage = 'ProofPal could not e
     return new ProofPalError('NETWORK', 'ProofPal could not reach Gemini. Check your internet connection and retry.', true, 'retry');
   }
   return new ProofPalError('API', fallbackMessage, true, 'retry');
+}
+
+export async function sendFollowUpMessage(
+  message: string,
+  currentFeedback: string,
+  previousChat: { role: 'user' | 'model'; text: string }[],
+  config: { model: GeminiModel; depth: PedagogicalDepth }
+): Promise<string> {
+  const apiKey = await getApiKey();
+  if (!apiKey?.trim()) {
+    throw new ProofPalError(
+      'MISSING_API_KEY' as any,
+      'Add your Gemini API key before checking a proof.',
+      false,
+      'add-api-key'
+    );
+  }
+
+  try {
+    const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+    
+    const history = previousChat.map(msg => ({
+      role: msg.role,
+      parts: [{ text: msg.text }]
+    }));
+
+    const systemInstruction = `You are a helpful pedagogical math assistant. The user is asking a follow-up question about their proof evaluation.
+Current Feedback Provided to User:
+${currentFeedback}
+Pedagogical Depth: ${config.depth}`;
+
+    const contents = [
+      ...history,
+      { role: 'user', parts: [{ text: message }] }
+    ];
+
+    const response = await ai.models.generateContent({
+      model: config.model,
+      contents,
+      config: {
+        systemInstruction,
+        httpOptions: { timeout: GENERATION_TIMEOUT_MS },
+      },
+    });
+
+    if (!response.text) {
+      throw new Error('Empty response');
+    }
+
+    return response.text;
+  } catch (error) {
+    throw toProofPalError(error);
+  }
 }

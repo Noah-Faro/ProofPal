@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,12 @@ import {
   ScrollView,
   StyleSheet,
   SafeAreaView,
+  Alert,
 } from 'react-native';
 import { getSubjectsByCategory, getSubjectById } from '../models/subjects';
 import { SubjectCategory, MathSubject } from '../models/types';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
+import { loadCustomSubjects, addCustomSubject } from '../utilities/settings';
 
 /**
  * Props for the {@link SubjectPicker} component.
@@ -35,14 +37,53 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
   disabled = false,
 }) => {
   const [modalVisible, setModalVisible] = useState(false);
+  const [customSubjects, setCustomSubjects] = useState<MathSubject[]>([]);
 
-  const selectedSubject = selectedSubjectId ? getSubjectById(selectedSubjectId) : undefined;
-  const subjectsByCategory = getSubjectsByCategory();
+  useEffect(() => {
+    loadCustomSubjects().then(setCustomSubjects).catch(console.error);
+  }, []);
+
+  const selectedSubject = selectedSubjectId
+    ? getSubjectById(selectedSubjectId) || customSubjects.find(s => s.id === selectedSubjectId)
+    : undefined;
+  
+  const subjectsByCategory = { ...getSubjectsByCategory() };
+  if (customSubjects.length > 0) {
+    subjectsByCategory['OTHER' as SubjectCategory] = [
+      ...(subjectsByCategory['OTHER' as SubjectCategory] || []),
+      ...customSubjects,
+    ];
+  }
 
   const handleSelect = (subjectId: string | undefined) => {
     if (disabled) return;
     onSubjectChange(subjectId);
     setModalVisible(false);
+  };
+
+  const handleAddDomain = () => {
+    Alert.prompt('New Domain', 'Enter the name of the new math domain:', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Add',
+        onPress: async (name?: string) => {
+          if (name?.trim()) {
+            const newSubj: MathSubject = {
+              id: `custom_${Date.now()}`,
+              name: name.trim(),
+              category: 'OTHER' as SubjectCategory,
+            };
+            try {
+              await addCustomSubject(newSubj);
+              setCustomSubjects(prev => [...prev, newSubj]);
+              handleSelect(newSubj.id);
+            } catch (e) {
+              console.error(e);
+            }
+          }
+        },
+      }
+    ]);
   };
 
   return (
@@ -161,6 +202,13 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
                     </View>
                   );
                 })}
+
+                <TouchableOpacity 
+                  style={styles.addDomainButton} 
+                  onPress={handleAddDomain}
+                >
+                  <Text style={styles.addDomainButtonText}>+ Add New Domain</Text>
+                </TouchableOpacity>
               </ScrollView>
             </View>
           </SafeAreaView>
@@ -341,6 +389,16 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.md,
     color: COLORS.primaryLight,
     fontWeight: '700',
+  },
+  addDomainButton: {
+    paddingVertical: SPACING.md,
+    alignItems: 'center',
+    marginTop: SPACING.md,
+  },
+  addDomainButtonText: {
+    color: COLORS.primaryLight,
+    fontSize: FONT_SIZES.sm + 1,
+    fontWeight: 'bold',
   },
 });
 

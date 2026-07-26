@@ -55,6 +55,7 @@ export interface ProofCheckResult {
   model: GeminiModel;
   depth: PedagogicalDepth;
   timestamp: number;
+  chatHistory?: { role: 'user' | 'model'; text: string; imageUrl?: string }[];
 }
 
 export type AppErrorCode =

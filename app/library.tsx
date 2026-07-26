@@ -9,6 +9,7 @@ interface LibraryBook {
   id: string;
   name: string;
   domain: string;
+  subjectId?: string;
   uri: string;
   size?: number;
   addedAt: number;
@@ -68,6 +69,7 @@ export default function LibraryScreen() {
                 id: Date.now().toString(),
                 name: file.name,
                 domain: domain || 'General',
+                subjectId: domain || 'General',
                 uri: file.uri,
                 size: file.size,
                 addedAt: Date.now(),

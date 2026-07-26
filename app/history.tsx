@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, FlatList, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { loadHistory, clearHistory } from '../utilities/settings';
+import { Ionicons } from '@expo/vector-icons';
+import { loadHistory, clearHistory, deleteHistoryEntry } from '../utilities/settings';
 import { HistoryEntry } from '../models/types';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
@@ -36,6 +37,20 @@ export default function HistoryScreen() {
     return COLORS.primary;
   };
 
+  const handleDeleteItem = (id: string) => {
+    Alert.alert('Delete Entry', 'Are you sure you want to delete this history entry?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteHistoryEntry(id);
+          setHistory(prev => prev.filter(item => item.id !== id));
+        }
+      }
+    ]);
+  };
+
   const renderItem = ({ item }: { item: HistoryEntry }) => {
     const isExpanded = expandedId === item.id;
     return (
@@ -48,8 +63,13 @@ export default function HistoryScreen() {
             <Text style={styles.subjectText}>{item.subjectName || 'Unknown Subject'}</Text>
             <Text style={styles.dateText}>{new Date(item.timestamp).toLocaleString()}</Text>
           </View>
-          <View style={[styles.badge, { backgroundColor: getVerdictColor(item.verdict) }]}>
-            <Text style={styles.badgeText}>{item.verdict ? item.verdict.toUpperCase() : 'REVIEWED'}</Text>
+          <View style={styles.badgeContainer}>
+            <View style={[styles.badge, { backgroundColor: getVerdictColor(item.verdict) }]}>
+              <Text style={styles.badgeText}>{item.verdict ? item.verdict.toUpperCase() : 'REVIEWED'}</Text>
+            </View>
+            <TouchableOpacity onPress={() => handleDeleteItem(item.id)} style={styles.deleteIcon}>
+              <Ionicons name="trash-outline" size={20} color={COLORS.error} />
+            </TouchableOpacity>
           </View>
         </View>
         <Text style={styles.depthText}>Depth: {item.depth || 'Standard'}</Text>
@@ -163,6 +183,14 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontSize: FONT_SIZES.sm,
     marginTop: 2,
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  deleteIcon: {
+    marginLeft: SPACING.md,
+    padding: 4,
   },
   badge: {
     paddingHorizontal: SPACING.sm,

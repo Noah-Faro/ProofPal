@@ -12,8 +12,10 @@ import {
   Animated,
   Switch,
   PanResponder,
+  TextInput,
 } from 'react-native';
 import { Redirect, useFocusEffect, useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DropZone } from '../components/DropZone';
 import { DepthPicker } from '../components/DepthPicker';
 import { SubjectPicker } from '../components/SubjectPicker';
@@ -21,7 +23,7 @@ import { ExerciseContextPanel } from '../components/ExerciseContext';
 import { ModelBadge } from '../components/ModelBadge';
 import { FeedbackPanel } from '../components/FeedbackPanel';
 import { ErrorDialog } from '../components/ErrorDialog';
-import { checkProof } from '../services/geminiService';
+import { checkProof, sendFollowUpMessage } from '../services/geminiService';
 import { prepareImageForApi } from '../utilities/imageHelper';
 import { DEFAULT_APP_SETTINGS, loadAppSettings, updateAppSettings, saveHistoryEntry } from '../utilities/settings';
 import { GeminiModel, type AppSettings, type HistoryEntry, PedagogicalDepth } from '../models/types';
@@ -62,6 +64,9 @@ export default function MainScreen() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [thinkingMode, setThinkingMode] = useState(false);
   const [conciseMode, setConciseMode] = useState(false);
+  const [chatHistory, setChatHistory] = useState<{role: 'user'|'model', text: string}[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
   const requestId = useRef(0);
   const controllerRef = useRef<AbortController | null>(null);
   const mounted = useRef(true);
@@ -161,14 +166,12 @@ export default function MainScreen() {
   const handleDepthChange = (nextDepth: PedagogicalDepth) => {
     if (isLoading) return;
     setDepth(nextDepth);
-    clearFeedback();
     void persist({ selectedDepth: nextDepth });
   };
 
   const handleSubjectChange = (subjectId: string | undefined) => {
     if (isLoading) return;
     setSelectedSubjectId(subjectId);
-    clearFeedback();
     void persist({ selectedSubjectId: subjectId });
   };
 
@@ -192,6 +195,28 @@ export default function MainScreen() {
     setStage(undefined);
   };
 
+  const handleSendChat = async (text: string) => {
+    if (!text.trim() || chatLoading || !result) return;
+    
+    const newMessage = { role: 'user' as const, text };
+    setChatHistory(prev => [...prev, newMessage]);
+    setChatLoading(true);
+    
+    try {
+      const responseText = await sendFollowUpMessage(
+        text, 
+        result.feedbackMarkdown, 
+        chatHistory, 
+        { model: selectedModel, depth }
+      );
+      setChatHistory(prev => [...prev, { role: 'model', text: responseText }]);
+    } catch (e) {
+      setError(toAppError(e));
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
   const handleCheckProof = async () => {
     if (!proofImage || isLoading) return;
     const currentRequest = ++requestId.current;
@@ -209,7 +234,13 @@ export default function MainScreen() {
     setIsLoading(true);
     setStage('preparing');
     clearFeedback();
+    setChatHistory([]);
     try {
+      const libraryBooksJson = await AsyncStorage.getItem('proofpal_library');
+      if (libraryBooksJson) {
+        // TODO: pass book context to gemini
+      }
+
       const preparedImage = await prepareImageForApi(snapshot.proofImage);
       const checkResult = await checkProof({
         proofImage: preparedImage,
@@ -361,6 +392,45 @@ export default function MainScreen() {
             </View>
             <View style={styles.sheetBody}>
               <FeedbackPanel result={result} isLoading={isLoading} stage={stage} />
+              {result && (
+                <View style={styles.chatContainer}>
+                  <ScrollView style={styles.chatScroll} contentContainerStyle={styles.chatScrollContent}>
+                    {chatHistory.map((msg, index) => (
+                      <View key={index} style={[styles.chatBubble, msg.role === 'user' ? styles.chatBubbleUser : styles.chatBubbleModel]}>
+                        <Text style={[styles.chatText, msg.role === 'user' ? styles.chatTextUser : styles.chatTextModel]}>
+                          {msg.text}
+                        </Text>
+                      </View>
+                    ))}
+                    {chatLoading && (
+                      <ActivityIndicator style={{marginTop: 8}} color={COLORS.primaryLight} />
+                    )}
+                  </ScrollView>
+                  <View style={styles.chatInputRow}>
+                    <TextInput
+                      style={styles.chatInput}
+                      placeholder="Ask a follow-up question..."
+                      placeholderTextColor={COLORS.textMuted}
+                      value={chatInput}
+                      onChangeText={setChatInput}
+                      onSubmitEditing={() => {
+                        handleSendChat(chatInput);
+                        setChatInput('');
+                      }}
+                    />
+                    <TouchableOpacity
+                      style={styles.chatSendButton}
+                      onPress={() => {
+                        handleSendChat(chatInput);
+                        setChatInput('');
+                      }}
+                      disabled={chatLoading || !chatInput.trim()}
+                    >
+                      <Text style={styles.chatSendButtonText}>Send</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
             </View>
           </Animated.View>
         </View>
@@ -382,8 +452,8 @@ const styles = StyleSheet.create({
   loadingScreen: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.bgDark },
   loadingText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 255, 255, 0.1)' },
-  topBarRight: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-  title: { fontSize: FONT_SIZES.xl, fontWeight: 'bold', color: COLORS.textPrimary },
+  topBarRight: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, flexShrink: 1 },
+  title: { fontSize: FONT_SIZES.xl, fontWeight: 'bold', color: COLORS.textPrimary, flexShrink: 1 },
   viewResultButton: { backgroundColor: 'rgba(99, 102, 241, 0.2)', borderWidth: 1, borderColor: COLORS.primaryLight, borderRadius: BORDER_RADIUS.full, paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs },
   viewResultText: { color: COLORS.primaryLight, fontSize: FONT_SIZES.xs, fontWeight: '700' },
   scrollContent: { padding: SPACING.md, paddingBottom: SPACING.xxl },
@@ -409,4 +479,17 @@ const styles = StyleSheet.create({
   sheetCloseButton: { width: 32, height: 32, borderRadius: BORDER_RADIUS.full, backgroundColor: 'rgba(255, 255, 255, 0.08)', alignItems: 'center', justifyContent: 'center' },
   sheetCloseText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.md },
   sheetBody: { flex: 1, padding: SPACING.md },
+  chatContainer: { flex: 1, marginTop: SPACING.md, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', paddingTop: SPACING.md },
+  chatScroll: { flex: 1, marginBottom: SPACING.sm },
+  chatScrollContent: { gap: SPACING.sm },
+  chatBubble: { padding: SPACING.md, borderRadius: BORDER_RADIUS.md, maxWidth: '85%' },
+  chatBubbleUser: { backgroundColor: COLORS.primary, alignSelf: 'flex-end', borderBottomRightRadius: 4 },
+  chatBubbleModel: { backgroundColor: COLORS.bgSurface, alignSelf: 'flex-start', borderBottomLeftRadius: 4 },
+  chatText: { fontSize: FONT_SIZES.sm, lineHeight: 20 },
+  chatTextUser: { color: '#fff' },
+  chatTextModel: { color: COLORS.textPrimary },
+  chatInputRow: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'center' },
+  chatInput: { flex: 1, minHeight: 44, backgroundColor: COLORS.bgSurface, borderRadius: BORDER_RADIUS.md, paddingHorizontal: SPACING.md, color: COLORS.textPrimary, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' },
+  chatSendButton: { backgroundColor: COLORS.primary, paddingHorizontal: SPACING.lg, minHeight: 44, borderRadius: BORDER_RADIUS.md, alignItems: 'center', justifyContent: 'center' },
+  chatSendButtonText: { color: '#fff', fontWeight: 'bold', fontSize: FONT_SIZES.sm },
 });

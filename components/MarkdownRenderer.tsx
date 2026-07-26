@@ -18,7 +18,8 @@ function sanitizeLatex(text: string): string {
 
 /** Remove external image directives before rendering untrusted AI output natively. */
 export function sanitizeFeedbackMarkdown(content: string): string {
-  let cleaned = content.replace(/!\[[^\]]*\]\([^\s)]+(?:\s+[^)]*)?\)/g, '[Image omitted]');
+  let cleaned = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '');
+  cleaned = cleaned.replace(/!\[[^\]]*\]\([^\s)]+(?:\s+[^)]*)?\)/g, '[Image omitted]');
   cleaned = sanitizeLatex(cleaned);
   return cleaned;
 }
@@ -36,6 +37,8 @@ const markdownStyle: MarkdownStyle = {
   link: { color: COLORS.primaryLight },
   math: { color: COLORS.textPrimary, backgroundColor: COLORS.bgSurface, padding: SPACING.sm },
   inlineMath: { color: COLORS.textPrimary },
+  list_item: { color: COLORS.textPrimary },
+  bullet_list: { color: COLORS.textPrimary },
 };
 
 export function MarkdownRenderer({ content, style }: MarkdownRendererProps) {

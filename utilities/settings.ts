@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSubjectById } from '../models/subjects';
-import { GeminiModel, AppSettings, PedagogicalDepth, HistoryEntry } from '../models/types';
+import { GeminiModel, AppSettings, PedagogicalDepth, HistoryEntry, MathSubject } from '../models/types';
 
 export const SETTINGS_STORAGE_KEY = 'proofpal_settings';
 export const SETTINGS_VERSION = 2;
@@ -161,4 +161,27 @@ export async function saveHistoryEntry(entry: HistoryEntry): Promise<void> {
 
 export async function clearHistory(): Promise<void> {
   await AsyncStorage.removeItem(HISTORY_KEY);
+}
+
+export async function deleteHistoryEntry(id: string): Promise<void> {
+  const history = await loadHistory();
+  const updated = history.filter(entry => entry.id !== id);
+  await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+}
+
+export const CUSTOM_SUBJECTS_KEY = 'proofpal_custom_subjects';
+
+export async function loadCustomSubjects(): Promise<MathSubject[]> {
+  try {
+    const json = await AsyncStorage.getItem(CUSTOM_SUBJECTS_KEY);
+    return json ? JSON.parse(json) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function addCustomSubject(subject: MathSubject): Promise<void> {
+  const subjects = await loadCustomSubjects();
+  subjects.push(subject);
+  await AsyncStorage.setItem(CUSTOM_SUBJECTS_KEY, JSON.stringify(subjects));
 }

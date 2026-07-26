@@ -30,7 +30,7 @@ export interface DepthInfo {
  */
 export enum GeminiModel {
   FLASH_36 = 'gemini-3.6-flash',
-  PRO_31 = 'gemini-3.1-pro',
+  PRO_31 = 'gemini-3.1-pro-preview',
   FLASH_35_LITE = 'gemini-3.5-flash-lite',
 }
 
@@ -86,4 +86,5 @@ export interface HistoryEntry {
   depth: PedagogicalDepth;
   subjectName?: string;
   exerciseReference?: string;
+  chatHistory?: { role: 'user' | 'model'; text: string; imageUrl?: string }[];
 }
