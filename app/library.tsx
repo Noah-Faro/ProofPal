@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, FlatList, Alert, Modal, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -78,7 +78,7 @@ export default function LibraryScreen() {
     }
   };
 
-  const handleSelectDomain = (subject: MathSubject) => {
+  const handleSelectDomain = useCallback((subject: MathSubject) => {
     if (!pendingFile) return;
     const newBook: LibraryBook = {
       id: Date.now().toString(),
@@ -92,21 +92,20 @@ export default function LibraryScreen() {
     saveBooks([newBook, ...books]);
     setDomainModalVisible(false);
     setPendingFile(null);
-  };
+  }, [pendingFile, books]);
 
-  const handleDelete = (id: string) => {
+  const handleDelete = useCallback((id: string) => {
     Alert.alert('Delete Book', 'Are you sure you want to delete this book?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
         onPress: () => {
-          const newBooks = books.filter(b => b.id !== id);
-          saveBooks(newBooks);
-        }
-      }
+          saveBooks(books.filter(b => b.id !== id));
+        },
+      },
     ]);
-  };
+  }, [books]);
 
   const formatSize = (bytes?: number) => {
     if (!bytes) return 'Unknown size';

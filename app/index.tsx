@@ -109,6 +109,7 @@ export default function MainScreen() {
     });
   };
 
+  /* eslint-disable react-hooks/exhaustive-deps, react-hooks/refs */
   const panResponder = useMemo(
     () =>
       PanResponder.create({
@@ -153,30 +154,34 @@ export default function MainScreen() {
       }),
     [sheetAnim, height],
   );
+  /* eslint-enable react-hooks/exhaustive-deps, react-hooks/refs */
 
   const [availableBooks, setAvailableBooks] = useState<{id: string, name: string, uri: string, subjectId?: string}[]>([]);
   const [selectedBookId, setSelectedBookId] = useState<string | undefined>();
 
   useEffect(() => {
-    if (selectedSubjectId) {
-      AsyncStorage.getItem('proofpal_library').then(json => {
-        if (json && mounted.current) {
+    let isActive = true;
+    const fetchBooks = async () => {
+      if (selectedSubjectId) {
+        const json = await AsyncStorage.getItem('proofpal_library');
+        if (json && mounted.current && isActive) {
           const books = JSON.parse(json);
           const matching = books.filter((b: any) => b.subjectId === selectedSubjectId);
           setAvailableBooks(matching);
-          // If there's exactly one book, auto-select it
           if (matching.length === 1 && !selectedBookId) {
             setSelectedBookId(matching[0].id);
             setExerciseContext(prev => ({ ...prev, coursePdf: { uri: matching[0].uri, name: matching[0].name, mimeType: 'application/pdf' } }));
           }
         }
-      });
-    } else {
-      setAvailableBooks([]);
-      setSelectedBookId(undefined);
-      setExerciseContext(prev => ({ ...prev, coursePdf: undefined }));
-    }
-  }, [selectedSubjectId]);
+      } else if (isActive && mounted.current) {
+        setAvailableBooks([]);
+        setSelectedBookId(undefined);
+        setExerciseContext(prev => ({ ...prev, coursePdf: undefined }));
+      }
+    };
+    void fetchBooks();
+    return () => { isActive = false; };
+  }, [selectedSubjectId, selectedBookId]);
 
   const loadSettings = useCallback(async () => {
     try {

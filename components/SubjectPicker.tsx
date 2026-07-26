@@ -11,7 +11,7 @@ import {
   TextInput,
 } from 'react-native';
 import { getSubjectsByCategory, getSubjectById } from '../models/subjects';
-import { SubjectCategory, MathSubject } from '../models/types';
+import { MathSubject } from '../models/types';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
 import { loadCustomSubjects, addCustomSubject, loadCustomCategories, addCustomCategory } from '../utilities/settings';
 
