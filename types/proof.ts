@@ -44,6 +44,8 @@ export interface ProofCheckRequest {
   subject?: MathSubject;
   exerciseContext?: ProofExerciseContext;
   signal?: AbortSignal;
+  concise?: boolean;
+  thinking?: boolean;
   onStageChange?: (stage: ProofCheckStage) => void;
 }
 

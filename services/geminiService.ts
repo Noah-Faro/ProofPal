@@ -128,7 +128,7 @@ export async function checkProof(request: ProofCheckRequest): Promise<ProofCheck
         model: request.model,
         contents: [{ role: 'user', parts }],
         config: {
-          systemInstruction: buildSystemPrompt({ depth: request.depth, subject: request.subject }),
+          systemInstruction: buildSystemPrompt({ depth: request.depth, subject: request.subject, concise: request.concise, thinking: request.thinking }),
           responseMimeType: 'application/json',
           responseSchema: PROOF_RESULT_SCHEMA,
           abortSignal: request.signal,
@@ -366,8 +366,15 @@ function toProofPalError(error: unknown, fallbackMessage = 'ProofPal could not e
   if (message.includes('timeout') || message.includes('timed out')) {
     return new ProofPalError('TIMEOUT', 'The request took too long. Check your connection and try again.', true, 'retry');
   }
-  if (message.includes('429') || message.includes('resource_exhausted') || message.includes('rate limit')) {
-    return new ProofPalError('RATE_LIMIT', 'Gemini is temporarily busy. Please wait a moment and retry.', true, 'retry');
+  if (message.includes('429') || message.includes('resource_exhausted') || message.includes('rate limit') || message.includes('quota')) {
+    // Try to extract specific quota details
+    let rateLimitMsg = 'You have exceeded your Gemini API rate limit.';
+    if (message.includes('generatecontentfree_tier_requests') || message.includes('requests')) {
+      rateLimitMsg = 'You have hit your request limit for this model. Try switching to a different model, or wait and try again later.';
+    } else if (message.includes('generatecontentfree_tier_input_token_count') || message.includes('token')) {
+      rateLimitMsg = 'You have exceeded the token input limit for this model. Try a shorter prompt or switch models.';
+    }
+    return new ProofPalError('RATE_LIMIT', rateLimitMsg, true, 'retry');
   }
   if (message.includes('401') || message.includes('403') || message.includes('api key')) {
     return new ProofPalError('MISSING_API_KEY', 'Your Gemini API key was rejected. Add a valid key and retry.', false, 'add-api-key');

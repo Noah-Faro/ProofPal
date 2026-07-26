@@ -9,10 +9,10 @@ export const GEMINI_MODELS: ModelInfo[] = [
     description: 'Fast, high-quality responses. Best for most proofs.',
   },
   {
-    model: GeminiModel.PRO_31_PREVIEW,
-    label: 'Gemini 3.1 Pro Preview',
-    badge: 'Pro Preview',
-    description: 'Highest-quality, paid preview model for complex proofs.',
+    model: GeminiModel.PRO_31,
+    label: 'Gemini 3.1 Pro (50 req/day free)',
+    badge: 'Pro (limited)',
+    description: 'Deep reasoning for complex proofs. Free tier: 50 req/day, 2 req/min.',
   },
   {
     model: GeminiModel.FLASH_35_LITE,

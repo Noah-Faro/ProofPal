@@ -8,9 +8,19 @@ export interface MarkdownRendererProps {
   style?: ViewStyle;
 }
 
+/** Convert stray inequality symbols outside math delimiters to LaTeX. */
+function sanitizeLatex(text: string): string {
+  // Don't touch content inside $...$ or $$...$$
+  return text.replace(/(?<![\$])(?:<=|≤)/g, '$\\le$')
+             .replace(/(?<![\$])(?:>=|≥)/g, '$\\ge$')
+             .replace(/(?<![\$])(?:!=|≠)/g, '$\\neq$');
+}
+
 /** Remove external image directives before rendering untrusted AI output natively. */
 export function sanitizeFeedbackMarkdown(content: string): string {
-  return content.replace(/!\[[^\]]*\]\([^\s)]+(?:\s+[^)]*)?\)/g, '[Image omitted]');
+  let cleaned = content.replace(/!\[[^\]]*\]\([^\s)]+(?:\s+[^)]*)?\)/g, '[Image omitted]');
+  cleaned = sanitizeLatex(cleaned);
+  return cleaned;
 }
 
 const markdownStyle: MarkdownStyle = {
@@ -19,10 +29,10 @@ const markdownStyle: MarkdownStyle = {
   h2: { color: COLORS.primaryLight, fontSize: FONT_SIZES.lg, fontWeight: '700', marginTop: SPACING.md, marginBottom: SPACING.xs },
   h3: { color: COLORS.textPrimary, fontSize: FONT_SIZES.md, fontWeight: '700', marginTop: SPACING.sm, marginBottom: SPACING.xs },
   strong: { color: COLORS.textPrimary },
-  em: { color: COLORS.textSecondary },
+  em: { color: COLORS.textPrimary },
   code: { color: COLORS.accent, backgroundColor: COLORS.bgSurface },
   codeBlock: { color: COLORS.textPrimary, backgroundColor: COLORS.bgSurface, padding: SPACING.sm },
-  blockquote: { color: COLORS.textSecondary, borderColor: COLORS.primary, borderWidth: 1 },
+  blockquote: { color: COLORS.textPrimary, borderColor: COLORS.primary, borderWidth: 1 },
   link: { color: COLORS.primaryLight },
   math: { color: COLORS.textPrimary, backgroundColor: COLORS.bgSurface, padding: SPACING.sm },
   inlineMath: { color: COLORS.textPrimary },

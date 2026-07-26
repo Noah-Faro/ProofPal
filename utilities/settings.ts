@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSubjectById } from '../models/subjects';
-import { GeminiModel, AppSettings, PedagogicalDepth } from '../models/types';
+import { GeminiModel, AppSettings, PedagogicalDepth, HistoryEntry } from '../models/types';
 
 export const SETTINGS_STORAGE_KEY = 'proofpal_settings';
 export const SETTINGS_VERSION = 2;
@@ -20,7 +20,7 @@ const LEGACY_MODEL_MIGRATIONS: Record<string, GeminiModel> = {
   'gemini-2.5-flash': GeminiModel.FLASH_36,
   'gemini-2.5-flash-lite': GeminiModel.FLASH_36,
   'gemini-2.5-pro': GeminiModel.FLASH_36,
-  'gemini-3.1-pro': GeminiModel.PRO_31_PREVIEW,
+  'gemini-3.1-pro': GeminiModel.PRO_31,
 };
 
 const VALID_MODELS = new Set<string>(Object.values(GeminiModel));
@@ -138,4 +138,27 @@ export function updateAppSettings(update: Partial<AppSettings>): Promise<AppSett
 /** Mark the app as needing API-key onboarding while preserving all user preferences. */
 export function markOnboardingIncomplete(): Promise<AppSettings> {
   return updateAppSettings({ hasCompletedOnboarding: false });
+}
+
+const HISTORY_KEY = 'proofpal_history';
+const MAX_HISTORY_ENTRIES = 100;
+
+export async function loadHistory(): Promise<HistoryEntry[]> {
+  try {
+    const json = await AsyncStorage.getItem(HISTORY_KEY);
+    return json ? JSON.parse(json) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveHistoryEntry(entry: HistoryEntry): Promise<void> {
+  const history = await loadHistory();
+  history.unshift(entry);
+  if (history.length > MAX_HISTORY_ENTRIES) history.length = MAX_HISTORY_ENTRIES;
+  await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+}
+
+export async function clearHistory(): Promise<void> {
+  await AsyncStorage.removeItem(HISTORY_KEY);
 }

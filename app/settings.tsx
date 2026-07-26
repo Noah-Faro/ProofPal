@@ -166,6 +166,28 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* Proof History */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Proof History</Text>
+          <TouchableOpacity style={styles.card} onPress={() => router.push('/history')}>
+            <View style={{ padding: SPACING.md }}>
+              <Text style={styles.aboutTitle}>View Past Proofs</Text>
+              <Text style={styles.aboutText}>Review your previously checked proofs and feedback.</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* Course Library */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Course Library</Text>
+          <TouchableOpacity style={styles.card} onPress={() => router.push('/library')}>
+            <View style={{ padding: SPACING.md }}>
+              <Text style={styles.aboutTitle}>Manage Books</Text>
+              <Text style={styles.aboutText}>Upload and organize textbook PDFs by math domain.</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
       </ScrollView>
     </SafeAreaView>
   );

@@ -30,7 +30,7 @@ export interface DepthInfo {
  */
 export enum GeminiModel {
   FLASH_36 = 'gemini-3.6-flash',
-  PRO_31_PREVIEW = 'gemini-3.1-pro-preview',
+  PRO_31 = 'gemini-3.1-pro',
   FLASH_35_LITE = 'gemini-3.5-flash-lite',
 }
 
@@ -75,4 +75,15 @@ export interface AppSettings {
   selectedDepth: PedagogicalDepth;
   selectedSubjectId?: string;
   hasCompletedOnboarding: boolean;
+}
+
+export interface HistoryEntry {
+  id: string;
+  timestamp: number;
+  verdict: string; // 'correct' | 'incorrect' | 'incomplete' | 'unreadable'
+  feedbackMarkdown: string;
+  model: GeminiModel;
+  depth: PedagogicalDepth;
+  subjectName?: string;
+  exerciseReference?: string;
 }
