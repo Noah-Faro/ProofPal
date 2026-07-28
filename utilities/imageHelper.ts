@@ -86,7 +86,7 @@ export async function uriToBase64(uri: string): Promise<string> {
   } catch {
     throw new ProofPalError(
       'IMAGE_READ_FAILED',
-      'ProofPal could not read this image. Please choose it again and retry.',
+      'Scribe could not read this image. Please choose it again and retry.',
       true,
       'retry',
     );

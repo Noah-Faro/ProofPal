@@ -50,11 +50,10 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
   onDeleteSubject,
   onDeleteCategory,
 }) => {
-  const [modalVisible, setModalVisible] = useState(false);
+  const [modalState, setModalState] = useState<'none' | 'subjects' | 'newDomain'>('none');
   const [customSubjects, setCustomSubjects] = useState<MathSubject[]>([]);
   const [customCategories, setCustomCategories] = useState<string[]>([]);
   
-  const [newDomainModalVisible, setNewDomainModalVisible] = useState(false);
   const [newDomainName, setNewDomainName] = useState('');
   const [newDomainCategory, setNewDomainCategory] = useState<string>('');
 
@@ -84,7 +83,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
   const handleSelect = (subjectId: string | undefined) => {
     if (disabled) return;
     onSubjectChange(subjectId);
-    setModalVisible(false);
+    setModalState('none');
   };
 
   const confirmDeleteSubject = (id: string) => {
@@ -176,7 +175,6 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
         }
         setCustomSubjects(prev => [...prev, newSubj]);
         handleSelect(newSubj.id);
-        setNewDomainModalVisible(false);
         setNewDomainName('');
         setNewDomainCategory('');
       } catch (e) {
@@ -193,7 +191,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
       <TouchableOpacity
         activeOpacity={0.8}
         disabled={disabled}
-        onPress={() => setModalVisible(true)}
+        onPress={() => setModalState('subjects')}
         style={[
           styles.triggerButton,
           selectedSubject && styles.triggerButtonActive,
@@ -222,10 +220,10 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
 
       {/* Grouped Subjects Modal */}
       <Modal
-        visible={modalVisible}
+        visible={modalState === 'subjects'}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={() => setModalState('none')}
       >
         <View style={styles.modalOverlay}>
           <SafeAreaView style={styles.modalContentContainer}>
@@ -240,7 +238,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
                 </View>
                 <TouchableOpacity
                   style={styles.closeButton}
-                  onPress={() => setModalVisible(false)}
+                  onPress={() => setModalState('none')}
                   accessibilityLabel="Close subject picker modal"
                 >
                   <Text style={styles.closeButtonText}>✕</Text>
@@ -338,7 +336,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
 
                 <TouchableOpacity 
                   style={styles.addDomainButton} 
-                  onPress={() => setNewDomainModalVisible(true)}
+                  onPress={() => setModalState('newDomain')}
                 >
                   <Text style={styles.addDomainButtonText}>+ Add New Domain</Text>
                 </TouchableOpacity>
@@ -357,10 +355,10 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
 
       {/* New Domain Modal */}
       <Modal
-        visible={newDomainModalVisible}
+        visible={modalState === 'newDomain'}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setNewDomainModalVisible(false)}
+        onRequestClose={() => setModalState('none')}
       >
         <View style={styles.modalOverlay}>
           <SafeAreaView style={styles.modalContentContainer}>
@@ -369,7 +367,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
                 <Text style={styles.modalTitle}>Add New Domain</Text>
                 <TouchableOpacity
                   style={styles.closeButton}
-                  onPress={() => setNewDomainModalVisible(false)}
+                  onPress={() => setModalState('none')}
                 >
                   <Text style={styles.closeButtonText}>✕</Text>
                 </TouchableOpacity>
@@ -583,6 +581,7 @@ const styles = StyleSheet.create({
   },
   deleteIconText: {
     fontSize: FONT_SIZES.sm,
+    color: COLORS.error,
   },
   subjectRightContainer: {
     flexDirection: 'row',

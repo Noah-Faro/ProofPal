@@ -221,7 +221,7 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>About</Text>
           <View style={styles.card}>
-            <Text style={styles.aboutTitle}>ProofPal v1.0</Text>
+            <Text style={styles.aboutTitle}>Scribe v1.0</Text>
             <Text style={styles.aboutText}>
               Your AI math proof checker companion. Designed for iPad Split View to work alongside note-taking apps like Goodnotes.
             </Text>

@@ -52,7 +52,7 @@ export const FeedbackPanel: React.FC<FeedbackPanelProps> = ({ result, isLoading,
   return (
     <View style={[styles.card, styles.emptyCard, style]}>
       <Text style={styles.emptyTitle}>Drop a proof image and tap Check to get feedback</Text>
-      <Text style={styles.emptySubtitle}>ProofPal will analyse your mathematical steps and provide tailored guidance.</Text>
+      <Text style={styles.emptySubtitle}>Scribe will analyse your mathematical steps and provide tailored guidance.</Text>
     </View>
   );
 };

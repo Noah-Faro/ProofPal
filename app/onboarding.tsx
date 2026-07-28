@@ -63,7 +63,7 @@ export default function OnboardingScreen() {
       >
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
-            <Text style={styles.title}>Welcome to ProofPal</Text>
+            <Text style={styles.title}>Welcome to Scribe</Text>
             <Text style={styles.subtitle}>Your AI study buddy for math proofs</Text>
           </View>
 

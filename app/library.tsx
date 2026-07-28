@@ -1,37 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, FlatList, Alert, Modal, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
 import { MATH_SUBJECTS, getSubjectsByCategory } from '../models/subjects';
 import { loadCustomSubjects, loadCustomCategories } from '../utilities/settings';
 import { MathSubject } from '../models/types';
+import { loadLibrary, saveLibrary, LibraryBook } from '../utilities/libraryStorage';
 
-interface LibraryBook {
-  id: string;
-  name: string;
-  domain: string;
-  subjectId?: string;
-  uri: string;
-  size?: number;
-  addedAt: number;
-  remotePdfName?: string;
-  remotePdfTimestamp?: number;
-}
-
-export const LIBRARY_STORAGE_KEY = 'scribe_library';
-const STORAGE_KEY = LIBRARY_STORAGE_KEY;
-
-export async function loadLibrary(): Promise<LibraryBook[]> {
-  try {
-    const data = await AsyncStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch (e) {
-    console.error('Failed to load books', e);
-    return [];
-  }
-}
+export { LIBRARY_STORAGE_KEY, loadLibrary } from '../utilities/libraryStorage';
 
 export default function LibraryScreen() {
   const router = useRouter();
@@ -66,7 +43,7 @@ export default function LibraryScreen() {
 
   const saveBooks = async (newBooks: LibraryBook[]) => {
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newBooks));
+      await saveLibrary(newBooks);
       setBooks(newBooks);
     } catch (e) {
       console.error('Failed to save books', e);

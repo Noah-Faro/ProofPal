@@ -25,35 +25,38 @@ export function sanitizeFeedbackMarkdown(content: string): string {
 
   // 2. Extract math blocks into placeholders to protect them
   const mathBlocks: string[] = [];
-  const placeholderText = cleaned.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$)/g, (match) => {
+  let placeholderText = cleaned.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$)/g, (match) => {
     mathBlocks.push(match);
     return `___MATH_BLOCK_${mathBlocks.length - 1}___`;
   });
 
-  // 3. Sanitize non-math text (convert bare operators to LaTeX)
-  let sanitized = sanitizeLatex(placeholderText);
+  // 3. Convert bare operators in text
+  placeholderText = sanitizeLatex(placeholderText);
 
-  // 4. Restore math blocks
-  sanitized = sanitized.replace(/___MATH_BLOCK_(\d+)___/g, (_, indexStr) => {
-    const idx = parseInt(indexStr, 10);
-    return mathBlocks[idx] || '';
+  // Protect any math blocks created by sanitizeLatex
+  placeholderText = placeholderText.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$)/g, (match) => {
+    mathBlocks.push(match);
+    return `___MATH_BLOCK_${mathBlocks.length - 1}___`;
   });
 
-  // 5. Double-escape backslashes LAST for react-native-enriched-markdown
-  return sanitized.replace(/\\/g, '\\\\');
+  // 4. Double-escape backslashes on the text ONLY
+  const textWithEscapedBackslashes = placeholderText.replace(/\\/g, '\\\\');
+
+  // 5. Restore math blocks without double-escaping them
+  return textWithEscapedBackslashes.replace(/___MATH_BLOCK_(\d+)___/g, (_, indexStr) => {
+    const idx = parseInt(indexStr, 10);
+    return mathBlocks[idx] ?? '';
+  });
 }
 
-const markdownStyle: MarkdownStyle & Record<string, unknown> = {
-  text: { color: COLORS.textPrimary },
+const markdownStyle: MarkdownStyle = {
   paragraph: { color: COLORS.textPrimary, fontSize: FONT_SIZES.md, lineHeight: 24, marginBottom: SPACING.sm },
   h1: { color: COLORS.primaryLight, fontSize: FONT_SIZES.xl, fontWeight: '700', marginTop: SPACING.md, marginBottom: SPACING.sm },
   h2: { color: COLORS.primaryLight, fontSize: FONT_SIZES.lg, fontWeight: '700', marginTop: SPACING.md, marginBottom: SPACING.xs },
   h3: { color: COLORS.textPrimary, fontSize: FONT_SIZES.md, fontWeight: '700', marginTop: SPACING.sm, marginBottom: SPACING.xs },
   strong: { color: COLORS.textPrimary },
   em: { color: COLORS.textPrimary },
-  li: { color: COLORS.textPrimary },
-  ul: { color: COLORS.textPrimary },
-  ol: { color: COLORS.textPrimary },
+  list: { color: COLORS.textPrimary, bulletColor: COLORS.textPrimary, markerColor: COLORS.textPrimary },
   code: { color: COLORS.accent, backgroundColor: COLORS.bgSurface },
   codeBlock: { color: COLORS.textPrimary, backgroundColor: COLORS.bgSurface, padding: SPACING.sm },
   blockquote: { color: COLORS.textPrimary, borderColor: COLORS.primary, borderWidth: 1 },

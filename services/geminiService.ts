@@ -346,7 +346,7 @@ export function toAppError(error: unknown): AppError {
   return toProofPalError(error);
 }
 
-function toProofPalError(error: unknown, fallbackMessage = 'ProofPal could not evaluate this proof. Please try again.'): ProofPalError {
+function toProofPalError(error: unknown, fallbackMessage = 'Scribe could not evaluate this proof. Please try again.'): ProofPalError {
   if (error instanceof ProofPalError) {
     return error;
   }

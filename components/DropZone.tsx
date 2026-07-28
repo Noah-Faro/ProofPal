@@ -76,7 +76,7 @@ export const DropZone: React.FC<DropZoneProps> = ({
         });
       }
     } catch {
-      Alert.alert('Image unavailable', 'ProofPal could not open the image picker. Please try again.');
+      Alert.alert('Image unavailable', 'Scribe could not open the image picker. Please try again.');
     } finally {
       setIsLoadingPicker(false);
     }

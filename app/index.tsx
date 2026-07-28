@@ -36,6 +36,9 @@ import { getSubjectById } from '../models/subjects';
 import { getModelInfo } from '../models/geminiModels';
 import { getDepthInfo } from '../models/depthLevels';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
+import { loadLibrary, LibraryBook } from '../utilities/libraryStorage';
+
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 let NativeDragDropView: React.ComponentType<any> | null = null;
 try {
@@ -44,14 +47,6 @@ try {
   NativeDragDropView = module.DragDropContentView || module.default;
 } catch {
   NativeDragDropView = null;
-}
-
-let NativeClipboard: any = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  NativeClipboard = require('expo-clipboard');
-} catch {
-  NativeClipboard = null;
 }
 
 function toAppError(error: unknown): AppError {
@@ -68,7 +63,7 @@ function toAppError(error: unknown): AppError {
       };
     }
   }
-  return { code: 'API', message: error instanceof Error ? error.message : 'ProofPal could not check this proof. Please try again.', retryable: true, recoveryAction: 'retry' };
+  return { code: 'API', message: error instanceof Error ? error.message : 'Scribe could not check this proof. Please try again.', retryable: true, recoveryAction: 'retry' };
 }
 
 const VERDICT_COPY: Record<ProofVerdict, { label: string; color: string; background: string }> = {
@@ -136,6 +131,13 @@ export default function MainScreen() {
     depth: PedagogicalDepth;
     subjectName?: string;
   } | null>(null);
+
+  const insets = useSafeAreaInsets();
+  const [topBarHeight, setTopBarHeight] = useState(60);
+  const [sheetHeaderHeight, setSheetHeaderHeight] = useState(50);
+
+  const mainKeyboardOffset = Platform.OS === 'ios' ? topBarHeight + insets.top : 0;
+  const sheetKeyboardOffset = Platform.OS === 'ios' ? sheetHeaderHeight + insets.top : 0;
 
   const requestId = useRef(0);
   const controllerRef = useRef<AbortController | null>(null);
@@ -266,50 +268,35 @@ export default function MainScreen() {
   );
   /* eslint-enable react-hooks/refs */
 
-  const [availableBooks, setAvailableBooks] = useState<{ id: string; name: string; uri: string; subjectId?: string }[]>([]);
-  const [selectedBooksMap, setSelectedBooksMap] = useState<Record<string, string>>({});
+  const [availableBooks, setAvailableBooks] = useState<LibraryBook[]>([]);
+  const [selectedBookId, setSelectedBookId] = useState<string | undefined>();
+
+  const refreshAvailableBooks = useCallback(async (subjectId: string | undefined) => {
+    if (!subjectId) {
+      setAvailableBooks([]);
+      return;
+    }
+    const books = await loadLibrary();
+    const matching = books.filter((b) => b.subjectId === subjectId);
+    setAvailableBooks(matching);
+  }, []);
 
   useEffect(() => {
     let isActive = true;
-    const fetchBooks = async () => {
-      if (selectedSubjectId) {
-        const json = await AsyncStorage.getItem('proofpal_library');
-        if (json && mounted.current && isActive) {
-          const books = JSON.parse(json);
-          const matching = books.filter((b: any) => b.subjectId === selectedSubjectId);
+    if (selectedSubjectId) {
+      void loadLibrary().then((books) => {
+        if (isActive && mounted.current) {
+          const matching = books.filter((b) => b.subjectId === selectedSubjectId);
           setAvailableBooks(matching);
-          
-          if (matching.length === 1) {
-            const singleBook = matching[0];
-            setSelectedBooksMap(prev => {
-              if (prev[selectedSubjectId] === singleBook.id) return prev;
-              return { ...prev, [selectedSubjectId]: singleBook.id };
-            });
-            setExerciseContext(prev => ({
-              ...prev,
-              coursePdf: { uri: singleBook.uri, name: singleBook.name, mimeType: 'application/pdf' },
-            }));
-          } else {
-            const currentBookId = selectedBooksMap[selectedSubjectId];
-            const found = matching.find((b: any) => b.id === currentBookId);
-            if (found) {
-              setExerciseContext(prev => ({
-                ...prev,
-                coursePdf: { uri: found.uri, name: found.name, mimeType: 'application/pdf' },
-              }));
-            } else {
-              setExerciseContext(prev => ({ ...prev, coursePdf: undefined }));
-            }
-          }
         }
-      } else if (isActive && mounted.current) {
-        setAvailableBooks([]);
-        setExerciseContext(prev => ({ ...prev, coursePdf: undefined }));
-      }
+      });
+    } else if (isActive && mounted.current) {
+      setAvailableBooks([]);
+    }
+    return () => {
+      isActive = false;
     };
-    void fetchBooks();
-    return () => { isActive = false; };
-  }, [selectedSubjectId, selectedBooksMap]);
+  }, [selectedSubjectId]);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -341,7 +328,10 @@ export default function MainScreen() {
 
   useFocusEffect(useCallback(() => {
     void loadSettings();
-  }, [loadSettings]));
+    if (selectedSubjectId) {
+      void refreshAvailableBooks(selectedSubjectId);
+    }
+  }, [loadSettings, refreshAvailableBooks, selectedSubjectId]));
 
   useEffect(() => {
     mounted.current = true;
@@ -360,6 +350,7 @@ export default function MainScreen() {
   const handleReset = () => {
     setProofImage(undefined);
     setExerciseContext({});
+    setSelectedBookId(undefined);
     setResult(null);
     setError(null);
     setProofExecutionDetails(null);
@@ -382,8 +373,38 @@ export default function MainScreen() {
   const handleSubjectChange = (subjectId: string | undefined) => {
     if (isLoading) return;
     setSelectedSubjectId(subjectId);
+    setSelectedBookId(undefined);
+    // A previous subject's PDF must never be submitted under a new subject
+    setExerciseContext((prev) => ({ ...prev, coursePdf: undefined }));
+    void refreshAvailableBooks(subjectId);
     void persist({ selectedSubjectId: subjectId });
   };
+
+  const handleSelectBook = useCallback((bookId: string | undefined) => {
+    setSelectedBookId(bookId);
+    if (bookId) {
+      setAvailableBooks((currentBooks) => {
+        const book = currentBooks.find((b) => b.id === bookId);
+        if (book) {
+          setExerciseContext((prev) => ({
+            ...prev,
+            coursePdf: {
+              uri: book.uri,
+              name: book.name,
+              mimeType: 'application/pdf',
+              size: book.size,
+            },
+          }));
+        }
+        return currentBooks;
+      });
+    } else {
+      setExerciseContext((prev) => ({
+        ...prev,
+        coursePdf: undefined,
+      }));
+    }
+  }, []);
 
   const handleProofImage = (image: LocalAttachment) => {
     if (isLoading) return;
@@ -393,6 +414,9 @@ export default function MainScreen() {
 
   const handleContextUpdate = (nextContext: ProofExerciseContext) => {
     if (isLoading) return;
+    if (!nextContext.coursePdf) {
+      setSelectedBookId(undefined);
+    }
     setExerciseContext(nextContext);
     clearFeedback();
   };
@@ -412,32 +436,6 @@ export default function MainScreen() {
     });
     if (!pickResult.canceled && pickResult.assets && pickResult.assets.length > 0) {
       setChatImageUri(pickResult.assets[0].uri);
-    }
-  };
-
-  const handlePasteChatImage = async () => {
-    try {
-      let clipboard = NativeClipboard;
-      if (!clipboard) {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          clipboard = require('expo-clipboard');
-        } catch {
-          clipboard = null;
-        }
-      }
-      if (clipboard && clipboard.getImageAsync) {
-        const clipboardResult = await clipboard.getImageAsync({ format: 'png' });
-        if (clipboardResult && clipboardResult.data) {
-          const base64Data = clipboardResult.data;
-          const uri = base64Data.startsWith('data:')
-            ? base64Data
-            : `data:image/png;base64,${base64Data}`;
-          setChatImageUri(uri);
-        }
-      }
-    } catch (e) {
-      console.error('Failed to paste image from clipboard:', e);
     }
   };
 
@@ -486,19 +484,12 @@ export default function MainScreen() {
     controllerRef.current = controller;
     const subject = selectedSubjectId ? getSubjectById(selectedSubjectId) : undefined;
 
-    const currentBookId = selectedSubjectId ? selectedBooksMap[selectedSubjectId] : undefined;
-    const selectedBook = availableBooks.find(b => b.id === currentBookId);
-    const updatedExerciseContext: ProofExerciseContext = {
-      ...exerciseContext,
-      ...(selectedBook ? { coursePdf: { uri: selectedBook.uri, name: selectedBook.name, mimeType: 'application/pdf' } } : {}),
-    };
-
     const snapshot = {
       proofImage,
       depth,
       model: modelOverride ?? selectedModel,
       subject,
-      exerciseContext: updatedExerciseContext,
+      exerciseContext,
     };
 
     setIsLoading(true);
@@ -560,7 +551,7 @@ export default function MainScreen() {
   };
 
   if (!settings) {
-    return <SafeAreaView style={styles.loadingScreen}><ActivityIndicator color={COLORS.primaryLight} /><Text style={styles.loadingText}>Loading ProofPal</Text></SafeAreaView>;
+    return <SafeAreaView style={styles.loadingScreen}><ActivityIndicator color={COLORS.primaryLight} /><Text style={styles.loadingText}>Loading Scribe</Text></SafeAreaView>;
   }
   if (!settings.hasCompletedOnboarding) return <Redirect href="/onboarding" />;
 
@@ -632,7 +623,7 @@ export default function MainScreen() {
           {chatLoading && (
             <View style={styles.chatLoadingRow}>
               <ActivityIndicator color={COLORS.primaryLight} size="small" />
-              <Text style={styles.chatLoadingText}>ProofPal is thinking...</Text>
+              <Text style={styles.chatLoadingText}>Scribe is thinking...</Text>
             </View>
           )}
         </ScrollView>
@@ -651,9 +642,6 @@ export default function MainScreen() {
         <View style={styles.chatInputRow}>
           <TouchableOpacity onPress={handlePickChatImage} style={{ padding: SPACING.xs }}>
             <Text style={{ fontSize: 20 }}>📷</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handlePasteChatImage} style={{ padding: SPACING.xs }}>
-            <Text style={{ fontSize: 20 }}>📋</Text>
           </TouchableOpacity>
           <TextInput
             style={styles.chatInput}
@@ -702,7 +690,7 @@ export default function MainScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.topBar}>
+      <View style={styles.topBar} onLayout={(e) => setTopBarHeight(e.nativeEvent.layout.height)}>
         <Text style={styles.title}>Scribe</Text>
         <View style={styles.topBarRight}>
           {result && (
@@ -714,7 +702,12 @@ export default function MainScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={mainKeyboardOffset}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
           <DropZone currentImage={proofImage} onImageReceived={handleProofImage} onClear={() => { setProofImage(undefined); clearFeedback(); }} disabled={isLoading} />
         </View>
@@ -725,54 +718,6 @@ export default function MainScreen() {
 
         <View style={styles.section}>
           <SubjectPicker selectedSubjectId={selectedSubjectId} onSubjectChange={handleSubjectChange} disabled={isLoading} />
-          {selectedSubjectId && availableBooks.length > 0 && (
-            <View style={{ marginTop: SPACING.md }}>
-              <Text style={{ color: COLORS.textSecondary, fontSize: FONT_SIZES.sm, fontWeight: '600', marginBottom: SPACING.xs, marginLeft: SPACING.xs }}>
-                Reference Book
-              </Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.sm, paddingHorizontal: SPACING.xs }}>
-                {availableBooks.map(book => {
-                  const isSelected = selectedSubjectId ? selectedBooksMap[selectedSubjectId] === book.id : false;
-                  return (
-                    <TouchableOpacity
-                      key={book.id}
-                      activeOpacity={0.7}
-                      disabled={isLoading}
-                      onPress={() => {
-                        if (!selectedSubjectId) return;
-                        if (isSelected) {
-                          setSelectedBooksMap(prev => {
-                            const next = { ...prev };
-                            delete next[selectedSubjectId];
-                            return next;
-                          });
-                          setExerciseContext(prev => ({ ...prev, coursePdf: undefined }));
-                        } else {
-                          setSelectedBooksMap(prev => ({ ...prev, [selectedSubjectId]: book.id }));
-                          setExerciseContext(prev => ({
-                            ...prev,
-                            coursePdf: { uri: book.uri, name: book.name, mimeType: 'application/pdf' },
-                          }));
-                        }
-                      }}
-                      style={{
-                        paddingHorizontal: SPACING.md,
-                        paddingVertical: SPACING.sm,
-                        borderRadius: BORDER_RADIUS.full,
-                        borderWidth: 1,
-                        borderColor: isSelected ? COLORS.primary : 'rgba(255,255,255,0.1)',
-                        backgroundColor: isSelected ? 'rgba(99,102,241,0.15)' : COLORS.bgSurface,
-                      }}
-                    >
-                      <Text style={{ color: isSelected ? COLORS.primaryLight : COLORS.textPrimary, fontSize: FONT_SIZES.sm, fontWeight: isSelected ? 'bold' : '500' }}>
-                        {book.name}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          )}
           {selectedSubjectId && availableBooks.length === 0 && (
             <TouchableOpacity
               style={styles.addBookLink}
@@ -785,7 +730,14 @@ export default function MainScreen() {
         </View>
 
         <View style={styles.section}>
-          <ExerciseContextPanel exerciseContext={exerciseContext} onUpdate={handleContextUpdate} disabled={isLoading} />
+          <ExerciseContextPanel
+            exerciseContext={exerciseContext}
+            onUpdate={handleContextUpdate}
+            disabled={isLoading}
+            availableBooks={availableBooks}
+            selectedBookId={selectedBookId}
+            onSelectBook={handleSelectBook}
+          />
         </View>
 
         {/* Toggles Row */}
@@ -843,6 +795,7 @@ export default function MainScreen() {
           </TouchableOpacity>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Bottom Sheet Feedback Overlay */}
       {showFeedback && (
@@ -861,7 +814,7 @@ export default function MainScreen() {
               <View style={styles.sheetHandle} {...panResponder.panHandlers}>
                 <View style={styles.sheetHandleBar} />
               </View>
-              <View style={styles.sheetHeader} {...panResponder.panHandlers}>
+              <View style={styles.sheetHeader} onLayout={(e) => setSheetHeaderHeight(e.nativeEvent.layout.height)} {...panResponder.panHandlers}>
                 <View style={styles.sheetHeaderLeft}>
                   <Text style={styles.sheetTitle}>Feedback</Text>
                 </View>
@@ -883,7 +836,7 @@ export default function MainScreen() {
               <View style={styles.sheetBody}>
                 <KeyboardAvoidingView 
                   behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
-                  keyboardVerticalOffset={Platform.OS === 'ios' ? (Platform.isPad ? 20 : 0) : 0}
+                  keyboardVerticalOffset={sheetKeyboardOffset}
                   style={{ flex: 1 }}
                 >
                   {isLoading ? (
@@ -896,7 +849,7 @@ export default function MainScreen() {
                   ) : (
                     <View style={styles.emptyContainer}>
                       <Text style={styles.emptyTitle}>Drop a proof image and tap Check to get feedback</Text>
-                      <Text style={styles.emptySubtitle}>ProofPal will analyze your mathematical steps and provide tailored guidance.</Text>
+                      <Text style={styles.emptySubtitle}>Scribe will analyze your mathematical steps and provide tailored guidance.</Text>
                     </View>
                   )}
                 </KeyboardAvoidingView>

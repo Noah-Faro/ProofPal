@@ -14,6 +14,7 @@ import {
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import type { LocalAttachment, ProofExerciseContext } from '../types/proof';
+import type { LibraryBook } from '../utilities/libraryStorage';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
 
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
@@ -26,6 +27,9 @@ export interface ExerciseContextProps {
   exerciseContext: ProofExerciseContext;
   onUpdate: (context: ProofExerciseContext) => void;
   disabled?: boolean;
+  availableBooks?: LibraryBook[];
+  selectedBookId?: string;
+  onSelectBook?: (bookId: string | undefined) => void;
 }
 
 function imageAttachment(asset: ImagePicker.ImagePickerAsset): LocalAttachment {
@@ -41,6 +45,9 @@ export const ExerciseContextPanel: React.FC<ExerciseContextProps> = ({
   exerciseContext,
   onUpdate,
   disabled = false,
+  availableBooks,
+  selectedBookId,
+  onSelectBook,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showTextInput, setShowTextInput] = useState(Boolean(exerciseContext.sourceText));
@@ -70,7 +77,7 @@ export const ExerciseContextPanel: React.FC<ExerciseContextProps> = ({
         update({ ...exerciseContext, sourceImage: imageAttachment(result.assets[0]) });
       }
     } catch {
-      Alert.alert('Image unavailable', 'ProofPal could not attach that image. Please try again.');
+      Alert.alert('Image unavailable', 'Scribe could not attach that image. Please try again.');
     }
   };
 
@@ -103,8 +110,11 @@ export const ExerciseContextPanel: React.FC<ExerciseContextProps> = ({
           size: asset.size ?? undefined,
         },
       });
+      if (onSelectBook) {
+        onSelectBook(undefined);
+      }
     } catch {
-      Alert.alert('PDF unavailable', 'ProofPal could not open the Files picker. Please try again.');
+      Alert.alert('PDF unavailable', 'Scribe could not open the Files picker. Please try again.');
     }
   };
 
@@ -203,6 +213,56 @@ export const ExerciseContextPanel: React.FC<ExerciseContextProps> = ({
 
           <View style={styles.fieldSection}>
             <Text style={styles.fieldLabel}>Course PDF</Text>
+            {availableBooks && availableBooks.length > 0 && (
+              <View style={styles.libraryBooksContainer}>
+                <Text style={styles.subFieldLabel}>Select from Library</Text>
+                <View style={styles.bookList}>
+                  {availableBooks.map((book) => {
+                    const isSelected = selectedBookId === book.id;
+                    return (
+                      <TouchableOpacity
+                        key={book.id}
+                        activeOpacity={0.7}
+                        disabled={disabled}
+                        onPress={() => {
+                          if (isSelected) {
+                            if (onSelectBook) onSelectBook(undefined);
+                            update({ ...exerciseContext, coursePdf: undefined });
+                          } else {
+                            if (onSelectBook) onSelectBook(book.id);
+                            update({
+                              ...exerciseContext,
+                              coursePdf: {
+                                uri: book.uri,
+                                name: book.name,
+                                mimeType: 'application/pdf',
+                                size: book.size,
+                              },
+                            });
+                          }
+                        }}
+                        style={[
+                          styles.bookItem,
+                          isSelected && styles.bookItemSelected,
+                          disabled && styles.disabled,
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Select library book ${book.name}`}
+                      >
+                        <Text style={[styles.bookItemText, isSelected && styles.bookItemTextSelected]} numberOfLines={1}>
+                          {isSelected ? '✓ ' : ''}{book.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <View style={styles.orDividerRow}>
+                  <View style={styles.orDividerLine} />
+                  <Text style={styles.orDividerText}>or upload local PDF</Text>
+                  <View style={styles.orDividerLine} />
+                </View>
+              </View>
+            )}
             <TouchableOpacity
               activeOpacity={0.7}
               disabled={disabled}
@@ -225,7 +285,10 @@ export const ExerciseContextPanel: React.FC<ExerciseContextProps> = ({
                 </View>
                 <TouchableOpacity
                   disabled={disabled}
-                  onPress={() => update({ ...exerciseContext, coursePdf: undefined })}
+                  onPress={() => {
+                    update({ ...exerciseContext, coursePdf: undefined });
+                    if (onSelectBook) onSelectBook(undefined);
+                  }}
                   style={styles.removeButton}
                   accessibilityRole="button"
                   accessibilityLabel="Remove course PDF"
@@ -275,6 +338,16 @@ const styles = StyleSheet.create({
   bodyContent: { paddingHorizontal: SPACING.md, paddingBottom: SPACING.md, borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.06)', gap: SPACING.md },
   fieldSection: { marginTop: SPACING.sm },
   fieldLabel: { fontSize: FONT_SIZES.xs, fontWeight: '600', color: COLORS.textSecondary, marginBottom: SPACING.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
+  subFieldLabel: { fontSize: FONT_SIZES.xs, color: COLORS.textMuted, fontWeight: '600', marginBottom: SPACING.xs },
+  libraryBooksContainer: { marginBottom: SPACING.xs },
+  bookList: { gap: SPACING.xs },
+  bookItem: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: BORDER_RADIUS.md, backgroundColor: COLORS.bgSurface, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' },
+  bookItemSelected: { backgroundColor: 'rgba(99, 102, 241, 0.18)', borderColor: COLORS.primary },
+  bookItemText: { color: COLORS.textPrimary, fontSize: FONT_SIZES.sm, fontWeight: '500' },
+  bookItemTextSelected: { color: COLORS.primaryLight, fontWeight: '700' },
+  orDividerRow: { flexDirection: 'row', alignItems: 'center', marginVertical: SPACING.sm, gap: SPACING.xs },
+  orDividerLine: { flex: 1, height: 1, backgroundColor: 'rgba(255, 255, 255, 0.08)' },
+  orDividerText: { fontSize: FONT_SIZES.xs, color: COLORS.textMuted },
   textInput: { backgroundColor: COLORS.bgSurface, borderRadius: BORDER_RADIUS.md, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm + 2, color: COLORS.textPrimary, fontSize: FONT_SIZES.sm, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' },
   multilineInput: { minHeight: 80, marginTop: SPACING.xs },
   sourceButtonRow: { flexDirection: 'row', gap: SPACING.sm },
