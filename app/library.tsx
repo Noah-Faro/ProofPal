@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, FlatList, Alert, Modal, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
 import { MATH_SUBJECTS, getSubjectsByCategory } from '../models/subjects';
 import { loadCustomSubjects, loadCustomCategories } from '../utilities/settings';
@@ -75,20 +76,41 @@ export default function LibraryScreen() {
     }
   };
 
-  const handleSelectDomain = useCallback((subject: MathSubject) => {
+  const handleSelectDomain = useCallback(async (subject: MathSubject) => {
     if (!pendingFile) return;
+
+    const bookId = Date.now().toString();
+    let durableUri = pendingFile.uri;
+
+    const docDir: string | null | undefined = (FileSystem as any).documentDirectory || FileSystem.Paths?.document?.uri;
+    if (docDir) {
+      try {
+        const sanitizedId = bookId.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const normalizedDir = docDir.endsWith('/') ? docDir : `${docDir}/`;
+        const destinationUri = `${normalizedDir}book_${sanitizedId}.pdf`;
+        await FileSystem.copyAsync({
+          from: pendingFile.uri,
+          to: destinationUri,
+        });
+        durableUri = destinationUri;
+      } catch (e) {
+        console.error('Failed to copy PDF to durable document directory', e);
+      }
+    }
+
     const newBook: LibraryBook = {
-      id: Date.now().toString(),
+      id: bookId,
       name: pendingFile.name,
       domain: subject.name,
       subjectId: subject.id,
-      uri: pendingFile.uri,
+      uri: durableUri,
       size: pendingFile.size,
       addedAt: Date.now(),
       ...(pendingFile.remotePdfName && { remotePdfName: pendingFile.remotePdfName }),
       ...(pendingFile.remotePdfTimestamp && { remotePdfTimestamp: pendingFile.remotePdfTimestamp }),
+      ...(pendingFile.remoteScopeId && { remoteScopeId: pendingFile.remoteScopeId }),
     };
-    saveBooks([newBook, ...books]);
+    await saveBooks([newBook, ...books]);
     setDomainModalVisible(false);
     setPendingFile(null);
   }, [pendingFile, books]);
@@ -99,12 +121,22 @@ export default function LibraryScreen() {
       {
         text: 'Delete',
         style: 'destructive',
-        onPress: () => {
-          saveBooks(books.filter(b => b.id !== id));
+        onPress: async () => {
+          const bookToDelete = books.find(b => b.id === id);
+          const docDir: string | null | undefined = (FileSystem as any).documentDirectory || FileSystem.Paths?.document?.uri;
+          if (bookToDelete?.uri && docDir && bookToDelete.uri.startsWith(docDir)) {
+            try {
+              await FileSystem.deleteAsync(bookToDelete.uri, { idempotent: true });
+            } catch (e) {
+              console.error('Failed to delete durable PDF file', e);
+            }
+          }
+          await saveBooks(books.filter(b => b.id !== id));
         },
       },
     ]);
   }, [books]);
+
 
   const formatSize = (bytes?: number) => {
     if (!bytes) return 'Unknown size';

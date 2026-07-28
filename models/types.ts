@@ -89,3 +89,17 @@ export interface HistoryEntry {
   chatHistory?: { role: 'user' | 'model'; text: string; imageUri?: string }[];
 }
 
+export interface LibraryBook {
+  id: string;
+  name: string;
+  domain: string;
+  subjectId?: string;
+  uri: string;
+  size?: number;
+  addedAt: number;
+  remotePdfName?: string;
+  remotePdfTimestamp?: number;
+  remoteScopeId?: string;
+}
+
+

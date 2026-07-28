@@ -32,8 +32,11 @@ jest.mock('expo-file-system', () => ({
   })),
 }));
 
+const mockGetApiScopeId = jest.fn();
+
 jest.mock('../secureStorage', () => ({
   getApiKey: (...args: unknown[]) => mockGetApiKey(...args),
+  getApiScopeId: (...args: unknown[]) => mockGetApiScopeId(...args),
 }));
 
 const request = {
@@ -42,11 +45,13 @@ const request = {
   model: GeminiModel.FLASH_36,
 };
 
+
 describe('checkProof', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFileSizes.clear();
     mockGetApiKey.mockResolvedValue('test-key');
+    mockGetApiScopeId.mockResolvedValue('test-scope-id');
     mockFileBase64.mockResolvedValue('Y29udGV4dA==');
     mockGenerateContent.mockResolvedValue({ text: JSON.stringify({ verdict: 'correct', feedbackMarkdown: 'Well done.' }) });
   });
@@ -190,7 +195,45 @@ describe('checkProof', () => {
       message: 'No internet connection. Check your network and try again.',
     });
   });
+
+  it('self-heals 404 error when cached PDF is used by re-uploading and retrying', async () => {
+    jest.useFakeTimers();
+    mockGenerateContent
+      .mockRejectedValueOnce(new Error('404 File not found'))
+      .mockResolvedValueOnce({ text: JSON.stringify({ verdict: 'correct', feedbackMarkdown: 'Retry succeeded.' }) });
+
+    mockUpload.mockResolvedValue({ name: 'files/fresh', state: 'PROCESSING' });
+    mockGetFile.mockResolvedValue({
+      name: 'files/fresh',
+      state: 'ACTIVE',
+      uri: 'https://files.example/fresh',
+      mimeType: 'application/pdf',
+    });
+
+    const pending = checkProof({
+      ...request,
+      exerciseContext: {
+        coursePdf: {
+          uri: 'file:///cached.pdf',
+          name: 'cached.pdf',
+          mimeType: 'application/pdf',
+          size: 1024,
+          remoteName: 'files/old_expired',
+          remoteTimestamp: Date.now() - 1000,
+          remoteScopeId: 'test-scope-id',
+        },
+      },
+    });
+
+    await jest.advanceTimersByTimeAsync(10_000);
+    await expect(pending).resolves.toMatchObject({ verdict: 'correct', remotePdfName: 'files/fresh' });
+
+    expect(mockGenerateContent).toHaveBeenCalledTimes(2);
+    expect(mockUpload).toHaveBeenCalled();
+    jest.useRealTimers();
+  });
 });
+
 
 describe('sendFollowUpMessage', () => {
   beforeEach(() => {

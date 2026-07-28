@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSubjectById } from '../models/subjects';
 import { GeminiModel, AppSettings, PedagogicalDepth, HistoryEntry, MathSubject } from '../models/types';
+export { getApiScopeId, rotateApiScopeId, deleteApiScopeId } from '../services/secureStorage';
+
 
 export const SETTINGS_STORAGE_KEY = 'scribe_settings';
 export const SETTINGS_VERSION = 2;

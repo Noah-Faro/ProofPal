@@ -248,6 +248,7 @@ export const ExerciseContextPanel: React.FC<ExerciseContextProps> = ({
                                 bookId: book.id,
                                 remoteName: book.remotePdfName,
                                 remoteTimestamp: book.remotePdfTimestamp,
+                                remoteScopeId: book.remoteScopeId,
                               },
                             });
                           }

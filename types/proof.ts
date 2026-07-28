@@ -18,6 +18,7 @@ export interface LocalAttachment {
   bookId?: string;
   remoteName?: string;
   remoteTimestamp?: number;
+  remoteScopeId?: string;
 }
 
 export interface PreparedImage {
@@ -60,6 +61,7 @@ export interface ProofCheckResult {
   timestamp: number;
   chatHistory?: { role: 'user' | 'model'; text: string; imageUri?: string }[];
   remotePdfName?: string;
+  remoteScopeId?: string;
 }
 
 export type AppErrorCode =

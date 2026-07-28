@@ -1,16 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LibraryBook } from '../models/types';
 
-export interface LibraryBook {
-  id: string;
-  name: string;
-  domain: string;
-  subjectId?: string;
-  uri: string;
-  size?: number;
-  addedAt: number;
-  remotePdfName?: string;
-  remotePdfTimestamp?: number;
-}
+export type { LibraryBook };
+
 
 export const LIBRARY_STORAGE_KEY = 'scribe_library';
 export const LEGACY_LIBRARY_STORAGE_KEY = 'proofpal_library';

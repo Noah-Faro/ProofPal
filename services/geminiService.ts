@@ -18,7 +18,7 @@ import {
   SUPPORTED_IMAGE_MIME_TYPES,
 } from '../types/proof';
 import { buildSystemPrompt, buildUserMessage } from './promptBuilder';
-import { getApiKey } from './secureStorage';
+import { getApiKey, getApiScopeId } from './secureStorage';
 import { MAX_INLINE_IMAGE_BYTES, prepareImageForApi } from '../utilities/imageHelper';
 
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
@@ -105,16 +105,28 @@ export async function checkProof(request: ProofCheckRequest): Promise<ProofCheck
     assertCombinedInlineImageSize(parts);
 
     let remotePdfName: string | undefined;
+    let usedCachedPdf = false;
+    let pdfPartIndex = -1;
+    const currentScopeId = await getApiScopeId();
+
     if (request.exerciseContext?.coursePdf) {
       request.onStageChange?.('uploading-pdf');
       const pdf = request.exerciseContext.coursePdf;
       
       const EXPIRATION_THRESHOLD_MS = 47 * 60 * 60 * 1000;
-      const isCachedAndValid = pdf.remoteName && pdf.remoteTimestamp && (Date.now() - pdf.remoteTimestamp < EXPIRATION_THRESHOLD_MS);
+      const isScopeValid = !pdf.remoteScopeId || (Boolean(currentScopeId) && pdf.remoteScopeId === currentScopeId);
+      const isCachedAndValid = Boolean(
+        pdf.remoteName &&
+        pdf.remoteTimestamp &&
+        isScopeValid &&
+        Date.now() - pdf.remoteTimestamp < EXPIRATION_THRESHOLD_MS
+      );
 
       if (isCachedAndValid && pdf.remoteName) {
+        usedCachedPdf = true;
         remotePdfName = pdf.remoteName;
         const cleanName = remotePdfName.replace(/^files\//, '');
+        pdfPartIndex = parts.length;
         parts.push(createPartFromUri(`https://generativelanguage.googleapis.com/v1beta/files/${cleanName}`, 'application/pdf'));
       } else {
         const uploadedPdf = await uploadAndProcessPdf(
@@ -129,34 +141,79 @@ export async function checkProof(request: ProofCheckRequest): Promise<ProofCheck
         if (!uploadedPdf.uri || !uploadedPdf.mimeType) {
           throw new ProofPalError('PDF_PROCESSING_FAILED', 'The uploaded PDF could not be used.', true, 'retry');
         }
+        pdfPartIndex = parts.length;
         parts.push(createPartFromUri(uploadedPdf.uri, uploadedPdf.mimeType));
       }
     }
 
     request.onStageChange?.('evaluating');
-    const response = await ai.models.generateContent({
-      model: request.model,
-      contents: [{ role: 'user', parts }],
-      config: {
-        systemInstruction: buildSystemPrompt({ depth: request.depth, subject: request.subject, concise: request.concise, thinking: request.thinking }),
-        responseMimeType: 'application/json',
-        responseSchema: PROOF_RESULT_SCHEMA,
-        abortSignal: request.signal,
-        httpOptions: { timeout: GENERATION_TIMEOUT_MS },
-        ...(request.thinking && {
-          thinkingConfig: {
-            thinkingLevel: 'HIGH',
-            includeThoughts: false,
-          }
-        } as any),
-      },
-    });
+    const generateCall = () =>
+      ai.models.generateContent({
+        model: request.model,
+        contents: [{ role: 'user', parts }],
+        config: {
+          systemInstruction: buildSystemPrompt({
+            depth: request.depth,
+            subject: request.subject,
+            concise: request.concise,
+            thinking: request.thinking,
+          }),
+          responseMimeType: 'application/json',
+          responseSchema: PROOF_RESULT_SCHEMA,
+          abortSignal: request.signal,
+          httpOptions: { timeout: GENERATION_TIMEOUT_MS },
+          ...(request.thinking &&
+            ({
+              thinkingConfig: {
+                thinkingLevel: 'HIGH',
+                includeThoughts: false,
+              },
+            } as any)),
+        },
+      });
 
-    return parseProofResult(response.text, request, remotePdfName);
+    let response;
+    try {
+      response = await generateCall();
+    } catch (genError: any) {
+      const errStr = String(genError?.message || genError).toLowerCase();
+      const is404 = errStr.includes('404') || errStr.includes('not found') || genError?.status === 404;
+
+      if (is404 && usedCachedPdf && request.exerciseContext?.coursePdf) {
+        console.warn('Cached PDF returned 404 from Gemini API. Self-healing: re-uploading PDF and retrying...');
+        remotePdfName = undefined;
+        request.onStageChange?.('uploading-pdf');
+        const pdf = request.exerciseContext.coursePdf;
+        const uploadedPdf = await uploadAndProcessPdf(
+          ai,
+          pdf,
+          request.signal,
+          (name) => {
+            remotePdfName = name;
+          },
+          () => request.onStageChange?.('processing-pdf'),
+        );
+        if (!uploadedPdf.uri || !uploadedPdf.mimeType) {
+          throw new ProofPalError('PDF_PROCESSING_FAILED', 'The uploaded PDF could not be used.', true, 'retry');
+        }
+        if (pdfPartIndex !== -1) {
+          parts[pdfPartIndex] = createPartFromUri(uploadedPdf.uri, uploadedPdf.mimeType);
+        } else {
+          parts.push(createPartFromUri(uploadedPdf.uri, uploadedPdf.mimeType));
+        }
+        request.onStageChange?.('evaluating');
+        response = await generateCall();
+      } else {
+        throw genError;
+      }
+    }
+
+    return parseProofResult(response.text, request, remotePdfName, currentScopeId ?? undefined);
   } catch (error) {
     throw toProofPalError(error);
   }
 }
+
 
 async function uploadAndProcessPdf(
   ai: GoogleGenAI,
@@ -280,7 +337,12 @@ function assertCombinedInlineImageSize(parts: Part[]): void {
   }
 }
 
-function parseProofResult(responseText: string | undefined, request: ProofCheckRequest, remotePdfName?: string): ProofCheckResult {
+function parseProofResult(
+  responseText: string | undefined,
+  request: ProofCheckRequest,
+  remotePdfName?: string,
+  remoteScopeId?: string,
+): ProofCheckResult {
   if (!responseText) {
     throw new ProofPalError('INVALID_RESPONSE', 'Gemini returned an empty proof evaluation. Please retry.', true, 'retry');
   }
@@ -296,11 +358,13 @@ function parseProofResult(responseText: string | undefined, request: ProofCheckR
       depth: request.depth,
       timestamp: Date.now(),
       remotePdfName,
+      remoteScopeId,
     };
   } catch {
     throw new ProofPalError('INVALID_RESPONSE', 'Gemini returned an invalid proof evaluation. Please retry.', true, 'retry');
   }
 }
+
 
 function isProofResultPayload(value: unknown): value is Pick<ProofCheckResult, 'verdict' | 'feedbackMarkdown'> {
   if (!value || typeof value !== 'object') {

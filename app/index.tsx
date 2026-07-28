@@ -424,6 +424,10 @@ export default function MainScreen() {
               name: book.name,
               mimeType: 'application/pdf',
               size: book.size,
+              bookId: book.id,
+              remoteName: book.remotePdfName,
+              remoteTimestamp: book.remotePdfTimestamp,
+              remoteScopeId: book.remoteScopeId,
             },
           }));
         }
@@ -436,6 +440,7 @@ export default function MainScreen() {
       }));
     }
   }, []);
+
 
   const handleProofImage = (image: LocalAttachment) => {
     if (isLoading) return;
@@ -553,6 +558,7 @@ export default function MainScreen() {
           void updateLibraryBook(snapshot.exerciseContext.coursePdf.bookId, {
             remotePdfName: checkResult.remotePdfName,
             remotePdfTimestamp: checkResult.timestamp,
+            remoteScopeId: checkResult.remoteScopeId,
           });
         }
         setResult(checkResult);
