@@ -4,13 +4,23 @@ import { useRouter } from 'expo-router';
 import { getApiKey, deleteApiKey } from '../services/secureStorage';
 import { GEMINI_MODELS } from '../models/geminiModels';
 import { GeminiModel } from '../models/types';
+import { getSubjectById } from '../models/subjects';
 import { ModelBadge } from '../components/ModelBadge';
+import { SubjectPicker } from '../components/SubjectPicker';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
-import { loadAppSettings, markOnboardingIncomplete, updateAppSettings } from '../utilities/settings';
+import {
+  loadAppSettings,
+  markOnboardingIncomplete,
+  updateAppSettings,
+  deleteCustomSubject,
+  deleteCustomCategory,
+  loadCustomSubjects,
+} from '../utilities/settings';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const [selectedModel, setSelectedModel] = useState<GeminiModel>(GeminiModel.FLASH_36);
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string | undefined>(undefined);
   const [apiKeyPreview, setApiKeyPreview] = useState<string>('Not set');
 
   useEffect(() => {
@@ -20,6 +30,7 @@ export default function SettingsScreen() {
       .then((settings) => {
         if (isActive) {
           setSelectedModel(settings.selectedModel);
+          setSelectedSubjectId(settings.selectedSubjectId);
         }
       })
       .catch((e) => console.error('Failed to load settings', e));
@@ -46,6 +57,46 @@ export default function SettingsScreen() {
       await updateAppSettings({ selectedModel: model });
     } catch (e) {
       console.error('Failed to save settings', e);
+    }
+  };
+
+  const handleSubjectChange = async (subjectId: string | undefined) => {
+    setSelectedSubjectId(subjectId);
+    try {
+      await updateAppSettings({ selectedSubjectId: subjectId });
+    } catch (e) {
+      console.error('Failed to save subject setting', e);
+    }
+  };
+
+  const handleDeleteSubject = async (id: string) => {
+    try {
+      await deleteCustomSubject(id);
+      if (selectedSubjectId === id) {
+        await updateAppSettings({ selectedSubjectId: undefined });
+        setSelectedSubjectId(undefined);
+      }
+    } catch (e) {
+      console.error('Failed to delete custom subject in settings', e);
+    }
+  };
+
+  const handleDeleteCategory = async (category: string) => {
+    try {
+      const customSubjs = await loadCustomSubjects();
+      const isSelectedInDeletedCat = customSubjs.some(
+        (s) => s.id === selectedSubjectId && s.category === category
+      );
+      const currentSubj = selectedSubjectId ? getSubjectById(selectedSubjectId) : undefined;
+      
+      await deleteCustomCategory(category);
+
+      if (isSelectedInDeletedCat || currentSubj?.category === category) {
+        await updateAppSettings({ selectedSubjectId: undefined });
+        setSelectedSubjectId(undefined);
+      }
+    } catch (e) {
+      console.error('Failed to delete custom category in settings', e);
     }
   };
 
@@ -134,6 +185,17 @@ export default function SettingsScreen() {
               );
             })}
           </View>
+        </View>
+
+        {/* Math Subject Context */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Math Subject Context</Text>
+          <SubjectPicker
+            selectedSubjectId={selectedSubjectId}
+            onSubjectChange={handleSubjectChange}
+            onDeleteSubject={handleDeleteSubject}
+            onDeleteCategory={handleDeleteCategory}
+          />
         </View>
 
         {/* API Key Management */}

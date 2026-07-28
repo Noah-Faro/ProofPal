@@ -17,9 +17,10 @@ export interface ErrorDialogProps {
   onRetry: () => void;
   onAddApiKey: () => void;
   onOpenSettings: () => void;
+  onSwitchModel?: (model: string) => void;
 }
 
-export function ErrorDialog({ error, onDismiss, onRetry, onAddApiKey, onOpenSettings }: ErrorDialogProps) {
+export function ErrorDialog({ error, onDismiss, onRetry, onAddApiKey, onOpenSettings, onSwitchModel }: ErrorDialogProps) {
   const titleRef = useRef<Text>(null);
 
   useEffect(() => {
@@ -52,6 +53,16 @@ export function ErrorDialog({ error, onDismiss, onRetry, onAddApiKey, onOpenSett
             <TouchableOpacity style={styles.dismissButton} onPress={onDismiss} accessibilityRole="button" accessibilityLabel="Dismiss error dialog">
               <Text style={styles.dismissText}>Dismiss</Text>
             </TouchableOpacity>
+            {error.suggestFallbackModel && onSwitchModel && (
+              <TouchableOpacity
+                style={styles.switchModelButton}
+                onPress={() => onSwitchModel(error.suggestFallbackModel!)}
+                accessibilityRole="button"
+                accessibilityLabel="Switch to Flash 3.6"
+              >
+                <Text style={styles.switchModelText}>Switch to Flash 3.6</Text>
+              </TouchableOpacity>
+            )}
             {action && (
               <TouchableOpacity style={styles.actionButton} onPress={action.onPress} accessibilityRole="button" accessibilityLabel={action.label}>
                 <Text style={styles.actionText}>{action.label}</Text>
@@ -72,6 +83,8 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap', gap: SPACING.sm, marginTop: SPACING.lg },
   dismissButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: SPACING.md, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.18)', borderRadius: BORDER_RADIUS.md },
   dismissText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm, fontWeight: '700' },
+  switchModelButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: SPACING.md, backgroundColor: COLORS.accent, borderRadius: BORDER_RADIUS.md },
+  switchModelText: { color: '#ffffff', fontSize: FONT_SIZES.sm, fontWeight: '700' },
   actionButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: SPACING.md, backgroundColor: COLORS.primary, borderRadius: BORDER_RADIUS.md },
   actionText: { color: '#ffffff', fontSize: FONT_SIZES.sm, fontWeight: '700' },
 });

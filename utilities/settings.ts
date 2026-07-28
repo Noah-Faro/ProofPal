@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSubjectById } from '../models/subjects';
 import { GeminiModel, AppSettings, PedagogicalDepth, HistoryEntry, MathSubject } from '../models/types';
 
-export const SETTINGS_STORAGE_KEY = 'proofpal_settings';
+export const SETTINGS_STORAGE_KEY = 'scribe_settings';
 export const SETTINGS_VERSION = 2;
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -37,6 +37,40 @@ function enqueue<T>(operation: () => Promise<T>): Promise<T> {
     () => undefined,
   );
   return result;
+}
+
+export const HISTORY_KEY = 'scribe_history';
+export const CUSTOM_SUBJECTS_KEY = 'scribe_custom_subjects';
+export const CUSTOM_CATEGORIES_KEY = 'scribe_custom_categories';
+
+/**
+ * One-time migration function that checks if proofpal_settings exists.
+ * If it does, copies data from all old proofpal_ keys to their scribe_ equivalents,
+ * then removes the old keys.
+ */
+export async function migrateStorageKeys(): Promise<void> {
+  try {
+    const oldSettings = await AsyncStorage.getItem('proofpal_settings');
+    if (oldSettings !== null) {
+      const KEY_MIGRATIONS: [string, string][] = [
+        ['proofpal_settings', SETTINGS_STORAGE_KEY],
+        ['proofpal_history', HISTORY_KEY],
+        ['proofpal_custom_subjects', CUSTOM_SUBJECTS_KEY],
+        ['proofpal_custom_categories', CUSTOM_CATEGORIES_KEY],
+        ['proofpal_library', 'scribe_library'],
+      ];
+
+      for (const [oldKey, newKey] of KEY_MIGRATIONS) {
+        const val = await AsyncStorage.getItem(oldKey);
+        if (val !== null) {
+          await AsyncStorage.setItem(newKey, val);
+          await AsyncStorage.removeItem(oldKey);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error migrating storage keys:', error);
+  }
 }
 
 function parseStoredSettings(value: string | null): StoredSettings {
@@ -110,6 +144,7 @@ function settingsDiffer(stored: StoredSettings, normalized: AppSettings): boolea
  */
 export function loadAppSettings(): Promise<AppSettings> {
   return enqueue(async () => {
+    await migrateStorageKeys();
     const stored = parseStoredSettings(await AsyncStorage.getItem(SETTINGS_STORAGE_KEY));
     const normalized = normalizeSettings(stored);
 
@@ -120,6 +155,8 @@ export function loadAppSettings(): Promise<AppSettings> {
     return normalized;
   });
 }
+
+export const loadSettings = loadAppSettings;
 
 /**
  * Merge a validated partial update with the latest persisted values in a serialized write queue.
@@ -140,7 +177,6 @@ export function markOnboardingIncomplete(): Promise<AppSettings> {
   return updateAppSettings({ hasCompletedOnboarding: false });
 }
 
-const HISTORY_KEY = 'proofpal_history';
 const MAX_HISTORY_ENTRIES = 100;
 
 export async function loadHistory(): Promise<HistoryEntry[]> {
@@ -159,6 +195,16 @@ export async function saveHistoryEntry(entry: HistoryEntry): Promise<void> {
   await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(history));
 }
 
+export async function updateHistoryEntry(id: string, updates: Partial<HistoryEntry>): Promise<void> {
+  const history = await loadHistory();
+  const index = history.findIndex((entry) => entry.id === id);
+  if (index !== -1) {
+    history[index] = { ...history[index], ...updates };
+    await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  }
+}
+
+
 export async function clearHistory(): Promise<void> {
   await AsyncStorage.removeItem(HISTORY_KEY);
 }
@@ -168,8 +214,6 @@ export async function deleteHistoryEntry(id: string): Promise<void> {
   const updated = history.filter(entry => entry.id !== id);
   await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
 }
-
-export const CUSTOM_SUBJECTS_KEY = 'proofpal_custom_subjects';
 
 export async function loadCustomSubjects(): Promise<MathSubject[]> {
   try {
@@ -186,7 +230,11 @@ export async function addCustomSubject(subject: MathSubject): Promise<void> {
   await AsyncStorage.setItem(CUSTOM_SUBJECTS_KEY, JSON.stringify(subjects));
 }
 
-export const CUSTOM_CATEGORIES_KEY = 'proofpal_custom_categories';
+export async function deleteCustomSubject(id: string): Promise<void> {
+  const subjects = await loadCustomSubjects();
+  const updated = subjects.filter((s) => s.id !== id);
+  await AsyncStorage.setItem(CUSTOM_SUBJECTS_KEY, JSON.stringify(updated));
+}
 
 export async function loadCustomCategories(): Promise<string[]> {
   try {
@@ -203,4 +251,14 @@ export async function addCustomCategory(category: string): Promise<void> {
     categories.push(category);
     await AsyncStorage.setItem(CUSTOM_CATEGORIES_KEY, JSON.stringify(categories));
   }
+}
+
+export async function deleteCustomCategory(category: string): Promise<void> {
+  const categories = await loadCustomCategories();
+  const updatedCats = categories.filter((c) => c !== category);
+  await AsyncStorage.setItem(CUSTOM_CATEGORIES_KEY, JSON.stringify(updatedCats));
+
+  const subjects = await loadCustomSubjects();
+  const updatedSubjs = subjects.filter((s) => s.category !== category);
+  await AsyncStorage.setItem(CUSTOM_SUBJECTS_KEY, JSON.stringify(updatedSubjs));
 }

@@ -55,7 +55,7 @@ export interface ProofCheckResult {
   model: GeminiModel;
   depth: PedagogicalDepth;
   timestamp: number;
-  chatHistory?: { role: 'user' | 'model'; text: string; imageUrl?: string }[];
+  chatHistory?: { role: 'user' | 'model'; text: string; imageUri?: string }[];
 }
 
 export type AppErrorCode =
@@ -77,6 +77,7 @@ export interface AppError {
   message: string;
   retryable: boolean;
   recoveryAction?: 'retry' | 'add-api-key' | 'open-settings';
+  suggestFallbackModel?: string;
 }
 
 export class ProofPalError extends Error implements AppError {
@@ -87,6 +88,7 @@ export class ProofPalError extends Error implements AppError {
     message: string,
     public readonly retryable: boolean,
     public readonly recoveryAction?: AppError['recoveryAction'],
+    public readonly suggestFallbackModel?: string,
   ) {
     super(message);
   }

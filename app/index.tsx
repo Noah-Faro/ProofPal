@@ -19,22 +19,23 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
-import { Redirect, useFocusEffect, useRouter } from 'expo-router';
+import { Redirect, useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DropZone } from '../components/DropZone';
 import { DepthPicker } from '../components/DepthPicker';
 import { SubjectPicker } from '../components/SubjectPicker';
 import { ExerciseContextPanel } from '../components/ExerciseContext';
 import { ModelBadge } from '../components/ModelBadge';
-import { FeedbackPanel } from '../components/FeedbackPanel';
 import { ErrorDialog } from '../components/ErrorDialog';
 import { checkProof, sendFollowUpMessage } from '../services/geminiService';
 import { prepareImageForApi } from '../utilities/imageHelper';
-import { DEFAULT_APP_SETTINGS, loadAppSettings, updateAppSettings, saveHistoryEntry } from '../utilities/settings';
+import { DEFAULT_APP_SETTINGS, loadAppSettings, updateAppSettings, saveHistoryEntry, updateHistoryEntry } from '../utilities/settings';
 import { GeminiModel, type AppSettings, type HistoryEntry, PedagogicalDepth } from '../models/types';
-import type { AppError, LocalAttachment, ProofCheckResult, ProofCheckStage, ProofExerciseContext } from '../types/proof';
+import type { AppError, LocalAttachment, ProofCheckResult, ProofCheckStage, ProofExerciseContext, ProofVerdict } from '../types/proof';
 import { ProofPalError } from '../types/proof';
 import { getSubjectById } from '../models/subjects';
+import { getModelInfo } from '../models/geminiModels';
+import { getDepthInfo } from '../models/depthLevels';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
 
 function toAppError(error: unknown): AppError {
@@ -47,16 +48,56 @@ function toAppError(error: unknown): AppError {
         message: candidate.message,
         retryable: candidate.retryable === true,
         recoveryAction: candidate.recoveryAction,
+        suggestFallbackModel: candidate.suggestFallbackModel,
       };
     }
   }
   return { code: 'API', message: error instanceof Error ? error.message : 'ProofPal could not check this proof. Please try again.', retryable: true, recoveryAction: 'retry' };
 }
 
+const VERDICT_COPY: Record<ProofVerdict, { label: string; color: string; background: string }> = {
+  correct: { label: 'Correct', color: COLORS.success, background: 'rgba(34, 197, 94, 0.15)' },
+  incorrect: { label: 'Needs revision', color: COLORS.error, background: 'rgba(239, 68, 68, 0.15)' },
+  incomplete: { label: 'Incomplete', color: COLORS.accent, background: 'rgba(245, 158, 11, 0.15)' },
+  unreadable: { label: 'Unreadable', color: COLORS.textSecondary, background: COLORS.bgSurface },
+};
+
+function VerdictBadge({ verdict }: { verdict: ProofVerdict }) {
+  const copy = VERDICT_COPY[verdict];
+  if (!copy) return null;
+  return (
+    <View style={[styles.statusBadge, { backgroundColor: copy.background, borderColor: copy.color }]} accessibilityLabel={`Verdict: ${copy.label}`}>
+      <Text style={[styles.statusBadgeText, { color: copy.color }]}>{copy.label}</Text>
+    </View>
+  );
+}
+
+function stageLabel(stage: ProofCheckStage | undefined): string {
+  switch (stage) {
+    case 'preparing': return 'Preparing your proof';
+    case 'uploading-pdf': return 'Uploading course PDF';
+    case 'processing-pdf': return 'Processing course PDF';
+    default: return 'Checking your proof';
+  }
+}
+
 export default function MainScreen() {
   const { height } = useWindowDimensions();
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    id?: string;
+    verdict?: string;
+    feedbackMarkdown?: string;
+    model?: string;
+    depth?: string;
+    subjectName?: string;
+    exerciseReference?: string;
+    chatHistory?: string;
+    timestamp?: string;
+  }>();
+
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(null);
   const [proofImage, setProofImage] = useState<LocalAttachment | undefined>();
   const [result, setResult] = useState<ProofCheckResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -69,10 +110,17 @@ export default function MainScreen() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [thinkingMode, setThinkingMode] = useState(false);
   const [conciseMode, setConciseMode] = useState(false);
-  const [chatHistory, setChatHistory] = useState<{role: 'user'|'model', text: string}[]>([]);
+  const [chatHistory, setChatHistory] = useState<{ role: 'user' | 'model'; text: string; imageUri?: string }[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
   const [chatImageUri, setChatImageUri] = useState<string | null>(null);
+
+  const [proofExecutionDetails, setProofExecutionDetails] = useState<{
+    model: GeminiModel;
+    depth: PedagogicalDepth;
+    subjectName?: string;
+  } | null>(null);
+
   const requestId = useRef(0);
   const controllerRef = useRef<AbortController | null>(null);
   const mounted = useRef(true);
@@ -85,29 +133,76 @@ export default function MainScreen() {
     }
   }, [chatHistory]);
 
-  // Bottom sheet animation
-  const sheetAnim = useMemo(() => new Animated.Value(0), []);
+  // Bottom sheet animation & snap points
+  const sheetAnim = useMemo(() => new Animated.Value(height), [height]);
 
-  const sheetHeight = height * 0.9;
+  const sheetHeight = height;
   const snapExpanded = 0;
   const snapHalf = height * 0.4;
-  const snapClosed = height * 0.9;
+  const snapPeek = height * 0.88;
+  const snapClosed = height;
 
-  const lastSheetY = useRef(snapHalf);
+  const lastSheetY = useRef(snapClosed);
 
-  const openSheet = () => {
+  const openSheet = useCallback(() => {
     setShowFeedback(true);
     lastSheetY.current = snapHalf;
     sheetAnim.setOffset(0);
-    sheetAnim.setValue(snapClosed);
     Animated.spring(sheetAnim, { toValue: snapHalf, useNativeDriver: true }).start();
-  };
+  }, [sheetAnim, snapHalf]);
 
-  const closeSheet = () => {
+  useEffect(() => {
+    if (params.id && params.feedbackMarkdown) {
+      const loadedVerdict = (params.verdict as ProofVerdict) || 'correct';
+      const loadedModel = (params.model as GeminiModel) || GeminiModel.FLASH_36;
+      const loadedDepth = (params.depth as PedagogicalDepth) || PedagogicalDepth.GUIDE;
+      const loadedTimestamp = params.timestamp ? parseInt(params.timestamp, 10) : Date.now();
+
+      setResult({
+        verdict: loadedVerdict,
+        feedbackMarkdown: params.feedbackMarkdown,
+        model: loadedModel,
+        depth: loadedDepth,
+        timestamp: loadedTimestamp,
+      });
+      setProofExecutionDetails({
+        model: loadedModel,
+        depth: loadedDepth,
+        subjectName: params.subjectName || undefined,
+      });
+      setCurrentHistoryId(params.id);
+
+      if (params.chatHistory) {
+        try {
+          const parsed = JSON.parse(params.chatHistory);
+          if (Array.isArray(parsed)) {
+            setChatHistory(parsed);
+          }
+        } catch (e) {
+          console.error('Failed to parse chatHistory from params:', e);
+        }
+      } else {
+        setChatHistory([]);
+      }
+
+      openSheet();
+    }
+  }, [params.id, params.feedbackMarkdown, params.verdict, params.model, params.depth, params.subjectName, params.chatHistory, params.timestamp, openSheet]);
+
+
+  const closeSheet = useCallback(() => {
+    Animated.spring(sheetAnim, { toValue: snapPeek, useNativeDriver: true }).start(() => {
+      lastSheetY.current = snapPeek;
+    });
+  }, [sheetAnim, snapPeek]);
+
+  const fullyCloseSheet = useCallback((onComplete?: () => void) => {
     Animated.timing(sheetAnim, { toValue: snapClosed, duration: 250, useNativeDriver: true }).start(() => {
       setShowFeedback(false);
+      lastSheetY.current = snapClosed;
+      if (onComplete) onComplete();
     });
-  };
+  }, [sheetAnim, snapClosed]);
 
   /* eslint-disable react-hooks/exhaustive-deps, react-hooks/refs */
   const panResponder = useMemo(
@@ -131,33 +226,31 @@ export default function MainScreen() {
           const velocityY = gestureState.vy;
           const predictedY = currentY + velocityY * 150;
 
+          const snapPoints = [snapExpanded, snapHalf, snapPeek, snapClosed];
           let nextSnap = snapHalf;
-          const distExpanded = Math.abs(predictedY - snapExpanded);
-          const distHalf = Math.abs(predictedY - snapHalf);
-          const distClosed = Math.abs(predictedY - snapClosed);
-
-          if (distClosed < distHalf && distClosed < distExpanded) {
-            nextSnap = snapClosed;
-          } else if (distExpanded < distHalf) {
-            nextSnap = snapExpanded;
-          } else {
-            nextSnap = snapHalf;
+          let minDistance = Infinity;
+          for (const pt of snapPoints) {
+            const dist = Math.abs(predictedY - pt);
+            if (dist < minDistance) {
+              minDistance = dist;
+              nextSnap = pt;
+            }
           }
 
           if (nextSnap === snapClosed) {
-            closeSheet();
+            fullyCloseSheet();
           } else {
             Animated.spring(sheetAnim, { toValue: nextSnap, useNativeDriver: true }).start();
             lastSheetY.current = nextSnap;
           }
         },
       }),
-    [sheetAnim, height],
+    [sheetAnim, snapExpanded, snapHalf, snapPeek, snapClosed, fullyCloseSheet],
   );
   /* eslint-enable react-hooks/exhaustive-deps, react-hooks/refs */
 
-  const [availableBooks, setAvailableBooks] = useState<{id: string, name: string, uri: string, subjectId?: string}[]>([]);
-  const [selectedBookId, setSelectedBookId] = useState<string | undefined>();
+  const [availableBooks, setAvailableBooks] = useState<{ id: string; name: string; uri: string; subjectId?: string }[]>([]);
+  const [selectedBooksMap, setSelectedBooksMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let isActive = true;
@@ -168,20 +261,38 @@ export default function MainScreen() {
           const books = JSON.parse(json);
           const matching = books.filter((b: any) => b.subjectId === selectedSubjectId);
           setAvailableBooks(matching);
-          if (matching.length === 1 && !selectedBookId) {
-            setSelectedBookId(matching[0].id);
-            setExerciseContext(prev => ({ ...prev, coursePdf: { uri: matching[0].uri, name: matching[0].name, mimeType: 'application/pdf' } }));
+          
+          if (matching.length === 1) {
+            const singleBook = matching[0];
+            setSelectedBooksMap(prev => {
+              if (prev[selectedSubjectId] === singleBook.id) return prev;
+              return { ...prev, [selectedSubjectId]: singleBook.id };
+            });
+            setExerciseContext(prev => ({
+              ...prev,
+              coursePdf: { uri: singleBook.uri, name: singleBook.name, mimeType: 'application/pdf' },
+            }));
+          } else {
+            const currentBookId = selectedBooksMap[selectedSubjectId];
+            const found = matching.find((b: any) => b.id === currentBookId);
+            if (found) {
+              setExerciseContext(prev => ({
+                ...prev,
+                coursePdf: { uri: found.uri, name: found.name, mimeType: 'application/pdf' },
+              }));
+            } else {
+              setExerciseContext(prev => ({ ...prev, coursePdf: undefined }));
+            }
           }
         }
       } else if (isActive && mounted.current) {
         setAvailableBooks([]);
-        setSelectedBookId(undefined);
         setExerciseContext(prev => ({ ...prev, coursePdf: undefined }));
       }
     };
     void fetchBooks();
     return () => { isActive = false; };
-  }, [selectedSubjectId, selectedBookId]);
+  }, [selectedSubjectId]);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -204,6 +315,7 @@ export default function MainScreen() {
       if (changed) {
         setResult(null);
         setError(null);
+        setProofExecutionDetails(null);
       }
     } catch {
       if (mounted.current) setSettings(DEFAULT_APP_SETTINGS);
@@ -225,6 +337,7 @@ export default function MainScreen() {
   const clearFeedback = () => {
     setResult(null);
     setError(null);
+    setProofExecutionDetails(null);
   };
 
   const handleReset = () => {
@@ -232,7 +345,10 @@ export default function MainScreen() {
     setExerciseContext({});
     setResult(null);
     setError(null);
-    closeSheet();
+    setProofExecutionDetails(null);
+    setChatHistory([]);
+    setCurrentHistoryId(null);
+    fullyCloseSheet();
   };
 
   const persist = async (update: Partial<AppSettings>) => {
@@ -273,32 +389,41 @@ export default function MainScreen() {
   };
 
   const handlePickChatImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
+    const pickResult = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.8,
     });
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      setChatImageUri(result.assets[0].uri);
+    if (!pickResult.canceled && pickResult.assets && pickResult.assets.length > 0) {
+      setChatImageUri(pickResult.assets[0].uri);
     }
   };
 
   const handleSendChat = async (text: string) => {
     if ((!text.trim() && !chatImageUri) || chatLoading || !result) return;
     
-    const newMessage = { role: 'user' as const, text: text || (chatImageUri ? '[Image attached]' : '') };
-    setChatHistory(prev => [...prev, newMessage]);
+    const activeUri = chatImageUri || undefined;
+    const newMessage = { role: 'user' as const, text: text.trim(), imageUri: activeUri };
+    const updatedUserHistory = [...chatHistory, newMessage];
+    setChatHistory(updatedUserHistory);
     setChatLoading(true);
+    setChatImageUri(null);
     
     try {
       const responseText = await sendFollowUpMessage(
         text, 
         result.feedbackMarkdown, 
-        chatHistory, 
-        { model: selectedModel, depth },
-        chatImageUri || undefined
+        chatHistory.map(({ role, text }) => ({ role, text })), 
+        {
+          model: proofExecutionDetails?.model ?? result.model,
+          depth: proofExecutionDetails?.depth ?? result.depth,
+        },
+        activeUri
       );
-      setChatHistory(prev => [...prev, { role: 'model', text: responseText }]);
-      setChatImageUri(null);
+      const updatedFullHistory = [...updatedUserHistory, { role: 'model' as const, text: responseText }];
+      setChatHistory(updatedFullHistory);
+      if (currentHistoryId) {
+        void updateHistoryEntry(currentHistoryId, { chatHistory: updatedFullHistory });
+      }
     } catch (e) {
       setError(toAppError(e));
     } finally {
@@ -306,30 +431,44 @@ export default function MainScreen() {
     }
   };
 
-  const handleCheckProof = async () => {
+  const handleCheckProof = async (modelOverride?: GeminiModel) => {
     if (!proofImage || isLoading) return;
+
+    if (showFeedback) {
+      fullyCloseSheet();
+    }
+
     const currentRequest = ++requestId.current;
     const controller = new AbortController();
     controllerRef.current = controller;
     const subject = selectedSubjectId ? getSubjectById(selectedSubjectId) : undefined;
+
+    const currentBookId = selectedSubjectId ? selectedBooksMap[selectedSubjectId] : undefined;
+    const selectedBook = availableBooks.find(b => b.id === currentBookId);
+    const updatedExerciseContext: ProofExerciseContext = {
+      ...exerciseContext,
+      ...(selectedBook ? { coursePdf: { uri: selectedBook.uri, name: selectedBook.name, mimeType: 'application/pdf' } } : {}),
+    };
+
     const snapshot = {
       proofImage,
       depth,
-      model: selectedModel,
+      model: modelOverride ?? selectedModel,
       subject,
-      exerciseContext: { ...exerciseContext },
+      exerciseContext: updatedExerciseContext,
     };
 
     setIsLoading(true);
     setStage('preparing');
     clearFeedback();
     setChatHistory([]);
-    try {
-      const libraryBooksJson = await AsyncStorage.getItem('proofpal_library');
-      if (libraryBooksJson) {
-        // TODO: pass book context to gemini
-      }
+    setProofExecutionDetails({
+      model: snapshot.model,
+      depth: snapshot.depth,
+      subjectName: snapshot.subject?.name,
+    });
 
+    try {
       const preparedImage = await prepareImageForApi(snapshot.proofImage);
       const checkResult = await checkProof({
         proofImage: preparedImage,
@@ -348,8 +487,10 @@ export default function MainScreen() {
         setResult(checkResult);
         openSheet();
         // Save to history
+        const newHistoryId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        setCurrentHistoryId(newHistoryId);
         const entry: HistoryEntry = {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          id: newHistoryId,
           timestamp: checkResult.timestamp,
           verdict: checkResult.verdict,
           feedbackMarkdown: checkResult.feedbackMarkdown,
@@ -357,9 +498,11 @@ export default function MainScreen() {
           depth: checkResult.depth,
           subjectName: subject?.name,
           exerciseReference: snapshot.exerciseContext.reference,
+          chatHistory: [],
         };
         void saveHistoryEntry(entry);
       }
+
     } catch (caught) {
       const nextError = toAppError(caught);
       if (controller.signal.aborted || nextError.code === 'CANCELLED') return;
@@ -378,10 +521,16 @@ export default function MainScreen() {
   }
   if (!settings.hasCompletedOnboarding) return <Redirect href="/onboarding" />;
 
+  const activeModel = proofExecutionDetails?.model ?? result?.model ?? selectedModel;
+  const activeDepth = proofExecutionDetails?.depth ?? result?.depth ?? depth;
+  const activeSubjectName = proofExecutionDetails?.subjectName;
+  const modelInfo = getModelInfo(activeModel);
+  const depthInfo = getDepthInfo(activeDepth);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
-        <Text style={styles.title}>ProofPal</Text>
+        <Text style={styles.title}>Scribe</Text>
         <View style={styles.topBarRight}>
           {result && (
             <TouchableOpacity style={styles.viewResultButton} onPress={openSheet}>
@@ -403,26 +552,34 @@ export default function MainScreen() {
 
         <View style={styles.section}>
           <SubjectPicker selectedSubjectId={selectedSubjectId} onSubjectChange={handleSubjectChange} disabled={isLoading} />
-          {availableBooks.length > 0 && (
+          {selectedSubjectId && availableBooks.length > 0 && (
             <View style={{ marginTop: SPACING.md }}>
               <Text style={{ color: COLORS.textSecondary, fontSize: FONT_SIZES.sm, fontWeight: '600', marginBottom: SPACING.xs, marginLeft: SPACING.xs }}>
                 Reference Book
               </Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.sm, paddingHorizontal: SPACING.xs }}>
                 {availableBooks.map(book => {
-                  const isSelected = selectedBookId === book.id;
+                  const isSelected = selectedSubjectId ? selectedBooksMap[selectedSubjectId] === book.id : false;
                   return (
                     <TouchableOpacity
                       key={book.id}
                       activeOpacity={0.7}
                       disabled={isLoading}
                       onPress={() => {
+                        if (!selectedSubjectId) return;
                         if (isSelected) {
-                          setSelectedBookId(undefined);
+                          setSelectedBooksMap(prev => {
+                            const next = { ...prev };
+                            delete next[selectedSubjectId];
+                            return next;
+                          });
                           setExerciseContext(prev => ({ ...prev, coursePdf: undefined }));
                         } else {
-                          setSelectedBookId(book.id);
-                          setExerciseContext(prev => ({ ...prev, coursePdf: { uri: book.uri, name: book.name, mimeType: 'application/pdf' } }));
+                          setSelectedBooksMap(prev => ({ ...prev, [selectedSubjectId]: book.id }));
+                          setExerciseContext(prev => ({
+                            ...prev,
+                            coursePdf: { uri: book.uri, name: book.name, mimeType: 'application/pdf' },
+                          }));
                         }
                       }}
                       style={{
@@ -442,6 +599,15 @@ export default function MainScreen() {
                 })}
               </ScrollView>
             </View>
+          )}
+          {selectedSubjectId && availableBooks.length === 0 && (
+            <TouchableOpacity
+              style={styles.addBookLink}
+              onPress={() => router.push('/library')}
+              disabled={isLoading}
+            >
+              <Text style={styles.addBookLinkText}>Add a textbook →</Text>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -473,26 +639,34 @@ export default function MainScreen() {
           </View>
         </View>
 
-        {/* Action Buttons */}
-        <TouchableOpacity
-          style={[styles.checkButton, (!proofImage || isLoading) && styles.checkButtonDisabled]}
-          onPress={handleCheckProof}
-          disabled={!proofImage || isLoading}
-          accessibilityRole="button"
-          accessibilityLabel="Check proof"
-        >
-          {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.checkButtonText}>Check Proof</Text>}
-        </TouchableOpacity>
+        {/* Action Buttons Row */}
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.checkButton, (!proofImage || isLoading) && styles.checkButtonDisabled]}
+            onPress={() => void handleCheckProof()}
+            disabled={!proofImage || isLoading}
+            accessibilityRole="button"
+            accessibilityLabel="Check proof"
+          >
+            {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.checkButtonText}>Check Proof</Text>}
+          </TouchableOpacity>
+
+          {(proofImage || exerciseContext.reference || exerciseContext.sourceText || exerciseContext.sourceImage || exerciseContext.coursePdf) && (
+            <TouchableOpacity
+              style={styles.resetButton}
+              onPress={handleReset}
+              disabled={isLoading}
+              accessibilityRole="button"
+              accessibilityLabel="Reset all"
+            >
+              <Text style={styles.resetButtonText}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         {isLoading && (
           <TouchableOpacity style={styles.cancelButton} onPress={handleCancel} accessibilityRole="button" accessibilityLabel="Cancel proof check">
             <Text style={styles.cancelButtonText}>Cancel</Text>
-          </TouchableOpacity>
-        )}
-
-        {(proofImage || exerciseContext.reference || exerciseContext.sourceText || exerciseContext.sourceImage || exerciseContext.coursePdf) && (
-          <TouchableOpacity style={styles.resetButton} onPress={handleReset} disabled={isLoading} accessibilityRole="button" accessibilityLabel="Reset all">
-            <Text style={styles.resetButtonText}>Reset</Text>
           </TouchableOpacity>
         )}
       </ScrollView>
@@ -512,41 +686,108 @@ export default function MainScreen() {
               <View style={styles.sheetHandleBar} />
             </View>
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Feedback</Text>
-              <TouchableOpacity onPress={closeSheet} style={styles.sheetCloseButton}>
+              <View style={styles.sheetHeaderLeft}>
+                <Text style={styles.sheetTitle}>Feedback</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  if (lastSheetY.current === snapPeek) {
+                    fullyCloseSheet();
+                  } else {
+                    closeSheet();
+                  }
+                }}
+                style={styles.sheetCloseButton}
+                accessibilityRole="button"
+                accessibilityLabel="Minimize feedback"
+              >
                 <Text style={styles.sheetCloseText}>✕</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.sheetBody}>
               <KeyboardAvoidingView 
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+                keyboardVerticalOffset={Platform.OS === 'ios' ? (Platform.isPad ? 20 : 0) : 0}
                 style={{ flex: 1 }}
               >
-                <View style={{ flex: 1 }}>
-                  <FeedbackPanel result={result} isLoading={isLoading} stage={stage} />
-                </View>
-                {result && (
-                  <View style={styles.chatContainer}>
-                    <ScrollView ref={chatScrollRef} style={styles.chatScroll} contentContainerStyle={styles.chatScrollContent}>
+                {isLoading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={COLORS.primaryLight} />
+                    <Text style={styles.loadingStageText}>{stageLabel(stage)}</Text>
+                  </View>
+                ) : result ? (
+                  <View style={{ flex: 1 }}>
+                    <ScrollView
+                      ref={chatScrollRef}
+                      style={styles.unifiedScroll}
+                      contentContainerStyle={styles.unifiedScrollContent}
+                      showsVerticalScrollIndicator={true}
+                    >
+                      {/* Thread Header Badges */}
+                      <View style={styles.threadHeaderBadges}>
+                        {modelInfo && (
+                          <View style={styles.modelBadge}>
+                            <Text style={styles.modelBadgeText}>{modelInfo.badge}</Text>
+                          </View>
+                        )}
+                        {depthInfo && (
+                          <View style={[styles.depthBadge, { borderColor: `${depthInfo.color}66`, backgroundColor: `${depthInfo.color}1A` }]}>
+                            <Text style={[styles.depthBadgeText, { color: depthInfo.color }]}>{depthInfo.label}</Text>
+                          </View>
+                        )}
+                        {activeSubjectName && (
+                          <View style={styles.subjectBadge}>
+                            <Text style={styles.subjectBadgeText}>{activeSubjectName}</Text>
+                          </View>
+                        )}
+                        <VerdictBadge verdict={result.verdict} />
+                        <Text style={styles.timestampText}>
+                          {new Date(result.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      </View>
+
+                      {/* Initial AI Feedback */}
+                      <View style={styles.aiMessageContainer}>
+                        <MarkdownRenderer content={result.feedbackMarkdown} />
+                      </View>
+
+                      {/* Subsequent Chat Messages */}
                       {chatHistory.map((msg, index) => (
-                        <View key={index} style={[styles.chatBubble, msg.role === 'user' ? styles.chatBubbleUser : styles.chatBubbleModel]}>
-                          <MarkdownRenderer content={msg.text} />
+                        <View key={index} style={msg.role === 'user' ? styles.userMessageContainer : styles.aiMessageContainer}>
+                          {msg.role === 'user' ? (
+                            <View style={styles.userBubble}>
+                              {msg.imageUri && (
+                                <Image source={{ uri: msg.imageUri }} style={styles.userMessageImage} resizeMode="cover" />
+                              )}
+                              {!!msg.text && (
+                                <Text style={styles.userBubbleText}>{msg.text}</Text>
+                              )}
+                            </View>
+                          ) : (
+                            <MarkdownRenderer content={msg.text} />
+                          )}
                         </View>
                       ))}
+
                       {chatLoading && (
-                        <ActivityIndicator style={{marginTop: 8}} color={COLORS.primaryLight} />
+                        <View style={styles.chatLoadingRow}>
+                          <ActivityIndicator color={COLORS.primaryLight} size="small" />
+                          <Text style={styles.chatLoadingText}>ProofPal is thinking...</Text>
+                        </View>
                       )}
                     </ScrollView>
-                    
+
+                    {/* Chat Image Attachment Preview */}
                     {chatImageUri && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginHorizontal: SPACING.md, marginBottom: SPACING.sm }}>
-                        <Image source={{ uri: chatImageUri }} style={{ width: 50, height: 50, borderRadius: 8, marginRight: 8 }} />
-                        <TouchableOpacity onPress={() => setChatImageUri(null)} style={{ backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12, padding: 4 }}>
-                          <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>✕</Text>
+                      <View style={styles.chatImagePreviewRow}>
+                        <Image source={{ uri: chatImageUri }} style={styles.chatImagePreview} />
+                        <TouchableOpacity onPress={() => setChatImageUri(null)} style={styles.removeImageButton}>
+                          <Text style={styles.removeImageText}>✕</Text>
                         </TouchableOpacity>
                       </View>
                     )}
-                    
+
+                    {/* Fixed Chat Input Row */}
                     <View style={styles.chatInputRow}>
                       <TouchableOpacity onPress={handlePickChatImage} style={{ padding: SPACING.xs }}>
                         <Text style={{ fontSize: 20 }}>📷</Text>
@@ -574,6 +815,11 @@ export default function MainScreen() {
                       </TouchableOpacity>
                     </View>
                   </View>
+                ) : (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyTitle}>Drop a proof image and tap Check to get feedback</Text>
+                    <Text style={styles.emptySubtitle}>ProofPal will analyze your mathematical steps and provide tailored guidance.</Text>
+                  </View>
                 )}
               </KeyboardAvoidingView>
             </View>
@@ -587,6 +833,12 @@ export default function MainScreen() {
         onRetry={() => { setError(null); void handleCheckProof(); }}
         onAddApiKey={() => { setError(null); router.push('/onboarding'); }}
         onOpenSettings={() => { setError(null); router.push('/settings'); }}
+        onSwitchModel={(model) => {
+          persist({ selectedModel: model as GeminiModel });
+          setSelectedModel(model as GeminiModel);
+          setError(null);
+          void handleCheckProof(model as GeminiModel);
+        }}
       />
     </SafeAreaView>
   );
@@ -596,9 +848,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bgDark },
   loadingScreen: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.bgDark },
   loadingText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm },
-  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 255, 255, 0.1)' },
+  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 255, 255, 0.1)' },
   topBarRight: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, flexShrink: 1 },
-  title: { fontSize: FONT_SIZES.xl, fontWeight: 'bold', color: COLORS.textPrimary, flexShrink: 1 },
+  title: { fontSize: FONT_SIZES.xl, fontWeight: 'bold', color: '#fff', flexShrink: 1 },
   viewResultButton: { backgroundColor: 'rgba(99, 102, 241, 0.2)', borderWidth: 1, borderColor: COLORS.primaryLight, borderRadius: BORDER_RADIUS.full, paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs },
   viewResultText: { color: COLORS.primaryLight, fontSize: FONT_SIZES.xs, fontWeight: '700' },
   scrollContent: { padding: SPACING.md, paddingBottom: SPACING.xxl },
@@ -606,13 +858,15 @@ const styles = StyleSheet.create({
   togglesRow: { flexDirection: 'row', gap: SPACING.lg, marginBottom: SPACING.md, paddingHorizontal: SPACING.xs },
   toggleItem: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   toggleLabel: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm, fontWeight: '600' },
-  checkButton: { minHeight: 52, backgroundColor: COLORS.primary, padding: SPACING.lg, borderRadius: BORDER_RADIUS.md, alignItems: 'center', justifyContent: 'center', marginTop: SPACING.md },
+  // Phase 2C Action Buttons
+  actionRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: SPACING.md },
+  checkButton: { width: '65%', height: 52, backgroundColor: COLORS.primary, paddingHorizontal: SPACING.lg, borderRadius: BORDER_RADIUS.md, alignItems: 'center', justifyContent: 'center' },
   checkButtonDisabled: { backgroundColor: COLORS.bgSurface, opacity: 0.7 },
   checkButtonText: { color: '#fff', fontSize: FONT_SIZES.lg, fontWeight: 'bold' },
+  resetButton: { width: 52, height: 52, borderRadius: BORDER_RADIUS.md, backgroundColor: 'rgba(239, 68, 68, 0.1)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)', alignItems: 'center', justifyContent: 'center' },
+  resetButtonText: { color: '#fff', fontSize: FONT_SIZES.lg, fontWeight: 'bold' },
   cancelButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: SPACING.sm, borderRadius: BORDER_RADIUS.md, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)' },
   cancelButtonText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm, fontWeight: '700' },
-  resetButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: SPACING.sm, borderRadius: BORDER_RADIUS.md, backgroundColor: 'rgba(239, 68, 68, 0.1)', borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' },
-  resetButtonText: { color: COLORS.error, fontSize: FONT_SIZES.sm, fontWeight: '700' },
   // Bottom Sheet
   sheetOverlay: { flex: 1, justifyContent: 'flex-end', alignItems: 'center' },
   sheetBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.5)' },
@@ -620,21 +874,44 @@ const styles = StyleSheet.create({
   sheetHandle: { alignItems: 'center', paddingTop: SPACING.sm, paddingBottom: SPACING.xs },
   sheetHandleBar: { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255, 255, 255, 0.25)' },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingBottom: SPACING.sm, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 255, 255, 0.08)' },
+  sheetHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   sheetTitle: { fontSize: FONT_SIZES.lg, fontWeight: 'bold', color: COLORS.textPrimary },
   sheetCloseButton: { width: 32, height: 32, borderRadius: BORDER_RADIUS.full, backgroundColor: 'rgba(255, 255, 255, 0.08)', alignItems: 'center', justifyContent: 'center' },
   sheetCloseText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.md },
   sheetBody: { flex: 1, padding: SPACING.md },
-  chatContainer: { flex: 1, marginTop: SPACING.md, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', paddingTop: SPACING.md },
-  chatScroll: { flex: 1, marginBottom: SPACING.sm },
-  chatScrollContent: { gap: SPACING.sm },
-  chatBubble: { padding: SPACING.md, borderRadius: BORDER_RADIUS.md, maxWidth: '85%' },
-  chatBubbleUser: { backgroundColor: COLORS.primary, alignSelf: 'flex-end', borderBottomRightRadius: 4 },
-  chatBubbleModel: { backgroundColor: COLORS.bgSurface, alignSelf: 'flex-start', borderBottomLeftRadius: 4 },
-  chatText: { fontSize: FONT_SIZES.sm, lineHeight: 20 },
-  chatTextUser: { color: '#fff' },
-  chatTextModel: { color: COLORS.textPrimary },
-  chatInputRow: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'center' },
+  // Phase 2B Unified Chat Thread
+  unifiedScroll: { flex: 1 },
+  unifiedScrollContent: { paddingBottom: SPACING.md },
+  threadHeaderBadges: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: SPACING.sm, paddingBottom: SPACING.sm, marginBottom: SPACING.sm, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 255, 255, 0.08)' },
+  modelBadge: { backgroundColor: 'rgba(99, 102, 241, 0.15)', borderWidth: 1, borderColor: 'rgba(129, 140, 248, 0.3)', borderRadius: BORDER_RADIUS.full, paddingHorizontal: SPACING.sm + 2, paddingVertical: 2 },
+  modelBadgeText: { fontSize: FONT_SIZES.xs, fontWeight: '600', color: COLORS.primaryLight },
+  depthBadge: { borderWidth: 1, borderRadius: BORDER_RADIUS.full, paddingHorizontal: SPACING.sm + 2, paddingVertical: 2 },
+  depthBadgeText: { fontSize: FONT_SIZES.xs, fontWeight: '600' },
+  subjectBadge: { backgroundColor: 'rgba(255, 255, 255, 0.08)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', borderRadius: BORDER_RADIUS.full, paddingHorizontal: SPACING.sm + 2, paddingVertical: 2 },
+  subjectBadgeText: { fontSize: FONT_SIZES.xs, fontWeight: '600', color: COLORS.textSecondary },
+  statusBadge: { borderWidth: 1, borderRadius: BORDER_RADIUS.full, paddingHorizontal: SPACING.sm + 2, paddingVertical: 2 },
+  statusBadgeText: { fontSize: FONT_SIZES.xs, fontWeight: '700' },
+  timestampText: { fontSize: FONT_SIZES.xs, color: COLORS.textMuted, marginLeft: 'auto' },
+  aiMessageContainer: { width: '100%', marginVertical: SPACING.xs },
+  userMessageContainer: { width: '100%', alignItems: 'flex-end', marginVertical: SPACING.xs },
+  userBubble: { backgroundColor: COLORS.bgSurface, maxWidth: '85%', borderRadius: BORDER_RADIUS.md, padding: SPACING.md, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' },
+  userBubbleText: { color: COLORS.textPrimary, fontSize: FONT_SIZES.sm, lineHeight: 20 },
+  userMessageImage: { width: 140, height: 140, borderRadius: BORDER_RADIUS.sm, marginBottom: SPACING.xs },
+  chatLoadingRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginVertical: SPACING.sm },
+  chatLoadingText: { color: COLORS.textMuted, fontSize: FONT_SIZES.sm },
+  chatImagePreviewRow: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.xs, paddingHorizontal: SPACING.xs },
+  chatImagePreview: { width: 50, height: 50, borderRadius: BORDER_RADIUS.sm, marginRight: SPACING.xs },
+  removeImageButton: { backgroundColor: 'rgba(255, 255, 255, 0.2)', borderRadius: BORDER_RADIUS.full, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  removeImageText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
+  chatInputRow: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'center', marginTop: SPACING.xs },
   chatInput: { flex: 1, minHeight: 44, backgroundColor: COLORS.bgSurface, borderRadius: BORDER_RADIUS.md, paddingHorizontal: SPACING.md, color: COLORS.textPrimary, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' },
   chatSendButton: { backgroundColor: COLORS.primary, paddingHorizontal: SPACING.lg, minHeight: 44, borderRadius: BORDER_RADIUS.md, alignItems: 'center', justifyContent: 'center' },
   chatSendButtonText: { color: '#fff', fontWeight: 'bold', fontSize: FONT_SIZES.sm },
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACING.md },
+  loadingStageText: { color: COLORS.primaryLight, fontSize: FONT_SIZES.md, fontWeight: '600' },
+  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.xl },
+  emptyTitle: { fontSize: FONT_SIZES.lg, fontWeight: '600', color: COLORS.textPrimary, textAlign: 'center', marginBottom: SPACING.xs },
+  emptySubtitle: { fontSize: FONT_SIZES.sm, color: COLORS.textMuted, textAlign: 'center', maxWidth: 360 },
+  addBookLink: { marginTop: SPACING.sm, marginLeft: SPACING.xs, alignSelf: 'flex-start' },
+  addBookLinkText: { color: COLORS.primaryLight, fontSize: FONT_SIZES.sm, fontWeight: '500' },
 });

@@ -86,5 +86,6 @@ export interface HistoryEntry {
   depth: PedagogicalDepth;
   subjectName?: string;
   exerciseReference?: string;
-  chatHistory?: { role: 'user' | 'model'; text: string; imageUrl?: string }[];
+  chatHistory?: { role: 'user' | 'model'; text: string; imageUri?: string }[];
 }
+

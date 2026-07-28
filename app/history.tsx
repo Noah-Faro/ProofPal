@@ -51,12 +51,28 @@ export default function HistoryScreen() {
     ]);
   };
 
+  const handleOpenEntry = (item: HistoryEntry) => {
+    router.push({
+      pathname: '/',
+      params: {
+        id: item.id,
+        verdict: item.verdict,
+        feedbackMarkdown: item.feedbackMarkdown,
+        model: item.model,
+        depth: item.depth,
+        subjectName: item.subjectName || '',
+        exerciseReference: item.exerciseReference || '',
+        chatHistory: item.chatHistory ? JSON.stringify(item.chatHistory) : JSON.stringify([]),
+        timestamp: item.timestamp.toString(),
+      },
+    });
+  };
+
   const renderItem = ({ item }: { item: HistoryEntry }) => {
-    const isExpanded = expandedId === item.id;
     return (
       <TouchableOpacity 
         style={styles.card} 
-        onPress={() => setExpandedId(isExpanded ? null : item.id)}
+        onPress={() => handleOpenEntry(item)}
       >
         <View style={styles.cardHeader}>
           <View>
@@ -67,25 +83,28 @@ export default function HistoryScreen() {
             <View style={[styles.badge, { backgroundColor: getVerdictColor(item.verdict) }]}>
               <Text style={styles.badgeText}>{item.verdict ? item.verdict.toUpperCase() : 'REVIEWED'}</Text>
             </View>
-            <TouchableOpacity onPress={() => handleDeleteItem(item.id)} style={styles.deleteIcon}>
+            <TouchableOpacity 
+              onPress={() => handleDeleteItem(item.id)} 
+              style={styles.deleteIcon}
+            >
               <Text style={{color: COLORS.error, fontSize: 18}}>✕</Text>
             </TouchableOpacity>
           </View>
         </View>
         <Text style={styles.depthText}>Depth: {item.depth || 'Standard'}</Text>
         
-        {isExpanded ? (
-          <View style={styles.markdownContainer}>
-            <MarkdownRenderer content={item.feedbackMarkdown} />
-          </View>
-        ) : (
-          <Text style={styles.previewText} numberOfLines={2}>
-            {item.feedbackMarkdown}
+        <Text style={styles.previewText} numberOfLines={2}>
+          {item.feedbackMarkdown}
+        </Text>
+        {item.chatHistory && item.chatHistory.length > 0 && (
+          <Text style={styles.chatCountText}>
+            💬 {item.chatHistory.length} follow-up message{item.chatHistory.length > 1 ? 's' : ''}
           </Text>
         )}
       </TouchableOpacity>
     );
   };
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -211,6 +230,12 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontSize: FONT_SIZES.sm,
   },
+  chatCountText: {
+    color: COLORS.primaryLight,
+    fontSize: FONT_SIZES.xs,
+    marginTop: SPACING.xs,
+    fontWeight: '500',
+  },
   markdownContainer: {
     marginTop: SPACING.sm,
     paddingTop: SPACING.sm,
@@ -218,3 +243,4 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(255, 255, 255, 0.1)',
   }
 });
+

@@ -10,10 +10,17 @@ import {
   Alert,
   TextInput,
 } from 'react-native';
-import { getSubjectsByCategory, getSubjectById } from '../models/subjects';
-import { MathSubject } from '../models/types';
+import { getSubjectsByCategory, getSubjectById, MATH_SUBJECTS } from '../models/subjects';
+import { MathSubject, SubjectCategory } from '../models/types';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
-import { loadCustomSubjects, addCustomSubject, loadCustomCategories, addCustomCategory } from '../utilities/settings';
+import {
+  loadCustomSubjects,
+  addCustomSubject,
+  deleteCustomSubject,
+  loadCustomCategories,
+  addCustomCategory,
+  deleteCustomCategory,
+} from '../utilities/settings';
 
 /**
  * Props for the {@link SubjectPicker} component.
@@ -24,6 +31,10 @@ export interface SubjectPickerProps {
   /** Callback triggered when a subject is selected or cleared */
   onSubjectChange: (subjectId: string | undefined) => void;
   disabled?: boolean;
+  /** Optional callback triggered when a custom subject is deleted */
+  onDeleteSubject?: (id: string) => void;
+  /** Optional callback triggered when a custom category is deleted */
+  onDeleteCategory?: (id: string, parentId?: string) => void;
 }
 
 /**
@@ -36,6 +47,8 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
   selectedSubjectId,
   onSubjectChange,
   disabled = false,
+  onDeleteSubject,
+  onDeleteCategory,
 }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [customSubjects, setCustomSubjects] = useState<MathSubject[]>([]);
@@ -72,6 +85,57 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
     if (disabled) return;
     onSubjectChange(subjectId);
     setModalVisible(false);
+  };
+
+  const confirmDeleteSubject = (id: string) => {
+    Alert.alert(
+      'Delete Custom Domain',
+      'Delete this custom domain?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteCustomSubject(id);
+              setCustomSubjects(prev => prev.filter(s => s.id !== id));
+              if (onDeleteSubject) {
+                onDeleteSubject(id);
+              }
+            } catch (e) {
+              console.error('Failed to delete custom subject', e);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const confirmDeleteCategory = (category: string) => {
+    Alert.alert(
+      'Delete Custom Category',
+      'Delete this custom category?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteCustomCategory(category);
+              setCustomCategories(prev => prev.filter(c => c !== category));
+              setCustomSubjects(prev => prev.filter(s => s.category !== category));
+              if (onDeleteCategory) {
+                onDeleteCategory(category, category);
+              }
+            } catch (e) {
+              console.error('Failed to delete custom category', e);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleAddCategory = () => {
@@ -198,20 +262,40 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
 
                 {/* Categorized Subject List */}
                 {Object.keys(subjectsByCategory).map((category) => {
-                  const subjects = subjectsByCategory[category];
-                  if (!subjects || subjects.length === 0) return null;
+                  const subjects = subjectsByCategory[category] || [];
+                  const isCustomCategory =
+                    customCategories.includes(category) ||
+                    !Object.values(SubjectCategory).includes(category as SubjectCategory);
+
+                  if (subjects.length === 0 && !isCustomCategory) return null;
 
                   return (
                     <View key={category} style={styles.categoryGroup}>
-                      <Text style={styles.categoryHeader}>{category}</Text>
+                      <View style={styles.categoryHeaderRow}>
+                        <Text style={styles.categoryHeader}>{category}</Text>
+                        {isCustomCategory && (
+                          <TouchableOpacity
+                            style={styles.deleteIconButton}
+                            onPress={() => confirmDeleteCategory(category)}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            accessibilityLabel={`Delete ${category} category`}
+                          >
+                            <Text style={styles.deleteIconText}>🗑️</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
                       {subjects.map((subj: MathSubject) => {
                         const isSelected = subj.id === selectedSubjectId;
+                        const isCustomSubject = !MATH_SUBJECTS.some((s) => s.id === subj.id);
 
                         return (
                           <TouchableOpacity
                             key={subj.id}
                             activeOpacity={0.7}
                             onPress={() => handleSelect(subj.id)}
+                            onLongPress={() => {
+                              if (isCustomSubject) confirmDeleteSubject(subj.id);
+                            }}
                             style={[
                               styles.subjectRow,
                               isSelected && styles.selectedRow,
@@ -225,7 +309,19 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
                             >
                               {subj.name}
                             </Text>
-                            {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                            <View style={styles.subjectRightContainer}>
+                              {isCustomSubject && (
+                                <TouchableOpacity
+                                  style={styles.deleteIconButton}
+                                  onPress={() => confirmDeleteSubject(subj.id)}
+                                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                  accessibilityLabel={`Delete ${subj.name} subject`}
+                                >
+                                  <Text style={styles.deleteIconText}>🗑️</Text>
+                                </TouchableOpacity>
+                              )}
+                              {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                            </View>
                           </TouchableOpacity>
                         );
                       })}
@@ -447,13 +543,29 @@ const styles = StyleSheet.create({
   categoryGroup: {
     marginBottom: SPACING.lg,
   },
+  categoryHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.xs,
+  },
   categoryHeader: {
     fontSize: FONT_SIZES.xs,
     fontWeight: '700',
     color: COLORS.primaryLight,
     letterSpacing: 1.1,
-    marginBottom: SPACING.xs,
     textTransform: 'uppercase',
+  },
+  deleteIconButton: {
+    padding: SPACING.xs,
+    marginLeft: SPACING.xs,
+  },
+  deleteIconText: {
+    fontSize: FONT_SIZES.sm,
+  },
+  subjectRightContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   subjectRow: {
     flexDirection: 'row',

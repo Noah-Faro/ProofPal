@@ -18,7 +18,18 @@ interface LibraryBook {
   addedAt: number;
 }
 
-const STORAGE_KEY = 'proofpal_library';
+export const LIBRARY_STORAGE_KEY = 'scribe_library';
+const STORAGE_KEY = LIBRARY_STORAGE_KEY;
+
+export async function loadLibrary(): Promise<LibraryBook[]> {
+  try {
+    const data = await AsyncStorage.getItem(STORAGE_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    console.error('Failed to load books', e);
+    return [];
+  }
+}
 
 export default function LibraryScreen() {
   const router = useRouter();
@@ -29,10 +40,10 @@ export default function LibraryScreen() {
 
   useEffect(() => {
     let isActive = true;
-    void AsyncStorage.getItem(STORAGE_KEY)
+    void loadLibrary()
       .then((data) => {
-        if (isActive && data) {
-          setBooks(JSON.parse(data));
+        if (isActive) {
+          setBooks(data);
         }
       })
       .catch((e) => console.error('Failed to load books', e));

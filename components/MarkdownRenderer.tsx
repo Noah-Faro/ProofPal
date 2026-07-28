@@ -9,31 +9,50 @@ export interface MarkdownRendererProps {
 }
 
 function sanitizeLatex(text: string): string {
-  // Don't touch content inside $...$ or $$...$$
-  return text.replace(/(?<![\$])(?:<=|≤)/g, '$\\\\le$')
-             .replace(/(?<![\$])(?:>=|≥)/g, '$\\\\ge$')
-             .replace(/(?<![\$])(?:!=|≠)/g, '$\\\\neq$')
-             .replace(/(?<![\$])(?:->|→)/g, '$\\\\rightarrow$')
-             .replace(/(?<![\$])(?:=>|⇒)/g, '$\\\\Rightarrow$')
-             .replace(/(?<![\$])(?:~|≈)/g, '$\\\\approx$');
+  return text
+    .replace(/(?<![$])(?:<=|≤)/g, '$\\le$')
+    .replace(/(?<![$])(?:>=|≥)/g, '$\\ge$')
+    .replace(/(?<![$])(?:!=|≠)/g, '$\\neq$')
+    .replace(/(?<![$])(?:->|→)/g, '$\\rightarrow$')
+    .replace(/(?<![$])(?:=>|⇒)/g, '$\\Rightarrow$')
+    .replace(/(?<![$])(?:~|≈)/g, '$\\approx$');
 }
 
-/** Remove external image directives before rendering untrusted AI output natively. */
 export function sanitizeFeedbackMarkdown(content: string): string {
-  let cleaned = content.replace(/\\/g, '\\\\');
-  cleaned = cleaned.replace(/<thinking>[\s\S]*?<\/thinking>/g, '');
+  // 1. Strip thinking blocks and images
+  let cleaned = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '');
   cleaned = cleaned.replace(/!\[[^\]]*\]\([^\s)]+(?:\s+[^)]*)?\)/g, '[Image omitted]');
-  cleaned = sanitizeLatex(cleaned);
-  return cleaned;
+
+  // 2. Extract math blocks into placeholders to protect them
+  const mathBlocks: string[] = [];
+  const placeholderText = cleaned.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$)/g, (match) => {
+    mathBlocks.push(match);
+    return `___MATH_BLOCK_${mathBlocks.length - 1}___`;
+  });
+
+  // 3. Sanitize non-math text (convert bare operators to LaTeX)
+  let sanitized = sanitizeLatex(placeholderText);
+
+  // 4. Restore math blocks
+  sanitized = sanitized.replace(/___MATH_BLOCK_(\d+)___/g, (_, indexStr) => {
+    const idx = parseInt(indexStr, 10);
+    return mathBlocks[idx] || '';
+  });
+
+  // 5. Double-escape backslashes LAST for react-native-enriched-markdown
+  return sanitized.replace(/\\/g, '\\\\');
 }
 
-const markdownStyle: MarkdownStyle = {
+const markdownStyle: MarkdownStyle & Record<string, unknown> = {
   paragraph: { color: COLORS.textPrimary, fontSize: FONT_SIZES.md, lineHeight: 24, marginBottom: SPACING.sm },
   h1: { color: COLORS.primaryLight, fontSize: FONT_SIZES.xl, fontWeight: '700', marginTop: SPACING.md, marginBottom: SPACING.sm },
   h2: { color: COLORS.primaryLight, fontSize: FONT_SIZES.lg, fontWeight: '700', marginTop: SPACING.md, marginBottom: SPACING.xs },
   h3: { color: COLORS.textPrimary, fontSize: FONT_SIZES.md, fontWeight: '700', marginTop: SPACING.sm, marginBottom: SPACING.xs },
   strong: { color: COLORS.textPrimary },
   em: { color: COLORS.textPrimary },
+  li: { color: COLORS.textPrimary },
+  ul: { color: COLORS.textPrimary },
+  ol: { color: COLORS.textPrimary },
   code: { color: COLORS.accent, backgroundColor: COLORS.bgSurface },
   codeBlock: { color: COLORS.textPrimary, backgroundColor: COLORS.bgSurface, padding: SPACING.sm },
   blockquote: { color: COLORS.textPrimary, borderColor: COLORS.primary, borderWidth: 1 },

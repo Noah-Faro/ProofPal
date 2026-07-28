@@ -142,4 +142,48 @@ describe('checkProof', () => {
     await expect(checkProof({ ...request, signal: controller.signal })).rejects.toMatchObject<Partial<ProofPalError>>({ code: 'CANCELLED' });
     expect(mockGetApiKey).not.toHaveBeenCalled();
   });
+
+  it('includes native thinkingConfig when thinking is true', async () => {
+    await checkProof({
+      ...request,
+      thinking: true,
+    });
+
+    const generationRequest = mockGenerateContent.mock.calls[0][0];
+    expect(generationRequest.config).toMatchObject({
+      thinkingConfig: {
+        thinkingLevel: 'HIGH',
+        includeThoughts: false,
+      },
+    });
+  });
+
+  it('maps 429 error to rate limit message with suggestFallbackModel', async () => {
+    mockGenerateContent.mockRejectedValue(new Error('429 Resource Exhausted'));
+
+    await expect(checkProof(request)).rejects.toMatchObject<Partial<ProofPalError>>({
+      code: 'RATE_LIMIT',
+      message: "You've reached the free tier limit for this model. Try switching to Flash 3.6, or wait a few minutes.",
+      suggestFallbackModel: 'gemini-3.6-flash',
+    });
+  });
+
+  it('maps 503 error to overloaded message with suggestFallbackModel', async () => {
+    mockGenerateContent.mockRejectedValue(new Error('503 Service Unavailable: overloaded'));
+
+    await expect(checkProof(request)).rejects.toMatchObject<Partial<ProofPalError>>({
+      code: 'API',
+      message: 'This model is currently overloaded. Try again in a moment, or switch to Flash 3.6.',
+      suggestFallbackModel: 'gemini-3.6-flash',
+    });
+  });
+
+  it('maps network error to no internet connection message', async () => {
+    mockGenerateContent.mockRejectedValue(new Error('Network request failed'));
+
+    await expect(checkProof(request)).rejects.toMatchObject<Partial<ProofPalError>>({
+      code: 'NETWORK',
+      message: 'No internet connection. Check your network and try again.',
+    });
+  });
 });
