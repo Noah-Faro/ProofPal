@@ -112,9 +112,10 @@ export async function checkProof(request: ProofCheckRequest): Promise<ProofCheck
       const EXPIRATION_THRESHOLD_MS = 47 * 60 * 60 * 1000;
       const isCachedAndValid = pdf.remoteName && pdf.remoteTimestamp && (Date.now() - pdf.remoteTimestamp < EXPIRATION_THRESHOLD_MS);
 
-      if (isCachedAndValid) {
+      if (isCachedAndValid && pdf.remoteName) {
         remotePdfName = pdf.remoteName;
-        parts.push(createPartFromUri(`https://generativelanguage.googleapis.com/v1beta/files/${pdf.remoteName}`, 'application/pdf'));
+        const cleanName = remotePdfName.replace(/^files\//, '');
+        parts.push(createPartFromUri(`https://generativelanguage.googleapis.com/v1beta/files/${cleanName}`, 'application/pdf'));
       } else {
         const uploadedPdf = await uploadAndProcessPdf(
           ai,
@@ -419,8 +420,9 @@ export async function sendFollowUpMessage(
     }));
 
     if (remotePdfName) {
+      const cleanName = remotePdfName.replace(/^files\//, '');
       const pdfPart = createPartFromUri(
-        remotePdfName.startsWith('http') ? remotePdfName : `https://generativelanguage.googleapis.com/v1beta/${remotePdfName.startsWith('files/') ? remotePdfName : 'files/' + remotePdfName}`,
+        remotePdfName.startsWith('http') ? remotePdfName : `https://generativelanguage.googleapis.com/v1beta/files/${cleanName}`,
         'application/pdf'
       );
       if (history.length > 0 && history[0].role === 'user') {

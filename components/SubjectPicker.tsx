@@ -37,6 +37,8 @@ export interface SubjectPickerProps {
   onDeleteSubject?: (id: string) => void;
   /** Optional callback triggered when a custom category is deleted */
   onDeleteCategory?: (id: string, parentId?: string) => void;
+  customSubjects: MathSubject[];
+  onCustomSubjectAdded: (subject: MathSubject) => void;
 }
 
 /**
@@ -51,16 +53,16 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
   disabled = false,
   onDeleteSubject,
   onDeleteCategory,
+  customSubjects,
+  onCustomSubjectAdded,
 }) => {
   const [modalState, setModalState] = useState<'none' | 'subjects' | 'newDomain'>('none');
-  const [customSubjects, setCustomSubjects] = useState<MathSubject[]>([]);
   const [customCategories, setCustomCategories] = useState<string[]>([]);
   
   const [newDomainName, setNewDomainName] = useState('');
   const [newDomainCategory, setNewDomainCategory] = useState<string>('');
 
   useEffect(() => {
-    loadCustomSubjects().then(setCustomSubjects).catch(console.error);
     loadCustomCategories().then(setCustomCategories).catch(console.error);
   }, []);
 
@@ -100,7 +102,6 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
           onPress: async () => {
             try {
               await deleteCustomSubject(id);
-              setCustomSubjects(prev => prev.filter(s => s.id !== id));
               if (onDeleteSubject) {
                 onDeleteSubject(id);
               }
@@ -126,7 +127,6 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
             try {
               await deleteCustomCategory(category);
               setCustomCategories(prev => prev.filter(c => c !== category));
-              setCustomSubjects(prev => prev.filter(s => s.category !== category));
               if (onDeleteCategory) {
                 onDeleteCategory(category, category);
               }
@@ -175,7 +175,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
           await addCustomCategory(category);
           setCustomCategories(prev => prev.includes(category) ? prev : [...prev, category]);
         }
-        setCustomSubjects(prev => [...prev, newSubj]);
+        onCustomSubjectAdded(newSubj);
         handleSelect(newSubj.id);
         setNewDomainName('');
         setNewDomainCategory('');

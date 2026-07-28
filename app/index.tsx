@@ -128,6 +128,7 @@ export default function MainScreen() {
   const [chatImageUri, setChatImageUri] = useState<string | null>(null);
   const [fullScreenImageUri, setFullScreenImageUri] = useState<string | null>(null);
   const [keyboardSpacerHeight, setKeyboardSpacerHeight] = useState(0);
+  const [isInputFocused, setIsInputFocused] = useState(false);
   const [customSubjects, setCustomSubjects] = useState<MathSubject[]>([]);
 
   const [proofExecutionDetails, setProofExecutionDetails] = useState<{
@@ -383,7 +384,6 @@ export default function MainScreen() {
 
   const handleSubjectChange = (subjectId: string | undefined) => {
     if (isLoading) return;
-    void loadCustomSubjects().then(setCustomSubjects);
     setSelectedSubjectId(subjectId);
     setSelectedBookId(undefined);
     // A previous subject's PDF must never be submitted under a new subject
@@ -756,7 +756,13 @@ export default function MainScreen() {
         </View>
 
         <View style={styles.section}>
-          <SubjectPicker selectedSubjectId={selectedSubjectId} onSubjectChange={handleSubjectChange} disabled={isLoading} />
+          <SubjectPicker 
+            selectedSubjectId={selectedSubjectId} 
+            onSubjectChange={handleSubjectChange} 
+            disabled={isLoading} 
+            customSubjects={customSubjects}
+            onCustomSubjectAdded={(subj) => setCustomSubjects(prev => [...prev, subj])}
+          />
           {selectedSubjectId && availableBooks.length === 0 && (
             <TouchableOpacity
               style={styles.addBookLink}
@@ -776,6 +782,8 @@ export default function MainScreen() {
             availableBooks={availableBooks}
             selectedBookId={selectedBookId}
             onSelectBook={handleSelectBook}
+            onFocus={() => setIsInputFocused(true)}
+            onBlur={() => setIsInputFocused(false)}
           />
         </View>
 
@@ -804,7 +812,7 @@ export default function MainScreen() {
         </View>
 
         {/* Action Buttons Row */}
-        {!keyboardSpacerHeight && (
+        {!isInputFocused && (
           <View style={styles.actionRow}>
             <TouchableOpacity
               style={[styles.checkButton, (!proofImage || isLoading) && styles.checkButtonDisabled]}

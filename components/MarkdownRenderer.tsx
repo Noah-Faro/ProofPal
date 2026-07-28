@@ -45,7 +45,10 @@ export function sanitizeFeedbackMarkdown(content: string): string {
   });
 
   // 4. Double-escape backslashes on the text ONLY
-  const textWithEscapedBackslashes = placeholderText.replace(/\\/g, '\\\\');
+  let textWithEscapedBackslashes = placeholderText.replace(/\\/g, '\\\\');
+
+  // Escape stray curly braces outside math blocks
+  textWithEscapedBackslashes = textWithEscapedBackslashes.replace(/\{/g, '\\\\{').replace(/\}/g, '\\\\}');
 
   // 5. Restore math blocks without double-escaping them, and standardize on $ / $$
   return textWithEscapedBackslashes.replace(/___MATH_BLOCK_(\d+)___/g, (_, indexStr) => {
@@ -57,6 +60,9 @@ export function sanitizeFeedbackMarkdown(content: string): string {
     } else if (block.startsWith('\\(') && block.endsWith('\\)')) {
       block = '$' + block.slice(2, -2) + '$';
     }
+    
+    // Convert ||...|| to \lVert ... \rVert
+    block = block.replace(/\|\|([\s\S]*?)\|\|/g, '\\\\lVert $1 \\\\rVert');
     
     // Fix squashed commands inside math blocks, e.g., \leqm -> \leq m
     block = block.replace(/\\(leq|le|geq|ge|neq|ne|approx|in|subset|cup|cap|to|rightarrow)([a-zA-Z]+)/g, (match, cmd, letters) => {

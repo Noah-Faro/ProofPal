@@ -30,6 +30,8 @@ export interface ExerciseContextProps {
   availableBooks?: LibraryBook[];
   selectedBookId?: string;
   onSelectBook?: (bookId: string | undefined) => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
 }
 
 function imageAttachment(asset: ImagePicker.ImagePickerAsset): LocalAttachment {
@@ -48,6 +50,8 @@ export const ExerciseContextPanel: React.FC<ExerciseContextProps> = ({
   availableBooks,
   selectedBookId,
   onSelectBook,
+  onFocus,
+  onBlur,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showTextInput, setShowTextInput] = useState(Boolean(exerciseContext.sourceText));
@@ -155,6 +159,8 @@ export const ExerciseContextPanel: React.FC<ExerciseContextProps> = ({
               placeholder="e.g., Exercise 4.2b, Spivak Ch. 5 #12"
               placeholderTextColor={COLORS.textMuted}
               accessibilityLabel="Exercise reference"
+              onFocus={onFocus}
+              onBlur={onBlur}
             />
           </View>
 
@@ -207,6 +213,8 @@ export const ExerciseContextPanel: React.FC<ExerciseContextProps> = ({
                 numberOfLines={3}
                 textAlignVertical="top"
                 accessibilityLabel="Exercise statement"
+                onFocus={onFocus}
+                onBlur={onBlur}
               />
             )}
           </View>

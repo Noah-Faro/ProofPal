@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Ale
 import { useRouter } from 'expo-router';
 import { getApiKey, deleteApiKey } from '../services/secureStorage';
 import { GEMINI_MODELS } from '../models/geminiModels';
-import { GeminiModel } from '../models/types';
+import { GeminiModel, MathSubject } from '../models/types';
 import { getSubjectById } from '../models/subjects';
 import { ModelBadge } from '../components/ModelBadge';
 import { SubjectPicker } from '../components/SubjectPicker';
@@ -22,6 +22,7 @@ export default function SettingsScreen() {
   const [selectedModel, setSelectedModel] = useState<GeminiModel>(GeminiModel.FLASH_36);
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | undefined>(undefined);
   const [apiKeyPreview, setApiKeyPreview] = useState<string>('Not set');
+  const [customSubjects, setCustomSubjects] = useState<MathSubject[]>([]);
 
   useEffect(() => {
     let isActive = true;
@@ -45,6 +46,10 @@ export default function SettingsScreen() {
         );
       })
       .catch((e) => console.error('Failed to load API key preview', e));
+
+    void loadCustomSubjects().then((loaded) => {
+      if (isActive) setCustomSubjects(loaded);
+    });
 
     return () => {
       isActive = false;
@@ -195,6 +200,8 @@ export default function SettingsScreen() {
             onSubjectChange={handleSubjectChange}
             onDeleteSubject={handleDeleteSubject}
             onDeleteCategory={handleDeleteCategory}
+            customSubjects={customSubjects}
+            onCustomSubjectAdded={(subj) => setCustomSubjects(prev => [...prev, subj])}
           />
         </View>
 
