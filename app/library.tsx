@@ -4,8 +4,8 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
-import { MATH_SUBJECTS } from '../models/subjects';
-import { loadCustomSubjects } from '../utilities/settings';
+import { MATH_SUBJECTS, getSubjectsByCategory } from '../models/subjects';
+import { loadCustomSubjects, loadCustomCategories } from '../utilities/settings';
 import { MathSubject } from '../models/types';
 
 interface LibraryBook {
@@ -16,6 +16,8 @@ interface LibraryBook {
   uri: string;
   size?: number;
   addedAt: number;
+  remotePdfName?: string;
+  remotePdfTimestamp?: number;
 }
 
 export const LIBRARY_STORAGE_KEY = 'scribe_library';
@@ -36,6 +38,7 @@ export default function LibraryScreen() {
   const [books, setBooks] = useState<LibraryBook[]>([]);
   const [domainModalVisible, setDomainModalVisible] = useState(false);
   const [allSubjects, setAllSubjects] = useState<MathSubject[]>([]);
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
   const [pendingFile, setPendingFile] = useState<any>(null);
 
   useEffect(() => {
@@ -50,6 +53,10 @@ export default function LibraryScreen() {
       
     loadCustomSubjects().then(custom => {
       if (isActive) setAllSubjects([...MATH_SUBJECTS, ...custom]);
+    });
+
+    loadCustomCategories().then(cats => {
+      if (isActive) setCustomCategories(cats);
     });
 
     return () => {
@@ -80,7 +87,9 @@ export default function LibraryScreen() {
       setPendingFile(result.assets[0]);
       
       const custom = await loadCustomSubjects();
+      const cats = await loadCustomCategories();
       setAllSubjects([...MATH_SUBJECTS, ...custom]);
+      setCustomCategories(cats);
       setDomainModalVisible(true);
       
     } catch (e) {
@@ -99,6 +108,8 @@ export default function LibraryScreen() {
       uri: pendingFile.uri,
       size: pendingFile.size,
       addedAt: Date.now(),
+      ...(pendingFile.remotePdfName && { remotePdfName: pendingFile.remotePdfName }),
+      ...(pendingFile.remotePdfTimestamp && { remotePdfTimestamp: pendingFile.remotePdfTimestamp }),
     };
     saveBooks([newBook, ...books]);
     setDomainModalVisible(false);
@@ -123,6 +134,22 @@ export default function LibraryScreen() {
     const mb = bytes / (1024 * 1024);
     return `${mb.toFixed(1)} MB`;
   };
+
+  const subjectsByCategory: Record<string, MathSubject[]> = { ...getSubjectsByCategory() };
+  
+  customCategories.forEach(cat => {
+    if (!subjectsByCategory[cat]) subjectsByCategory[cat] = [];
+  });
+
+  allSubjects.forEach(subj => {
+    const cat = subj.category as string;
+    if (!subjectsByCategory[cat]) {
+      subjectsByCategory[cat] = [];
+    }
+    if (!subjectsByCategory[cat].some(s => s.id === subj.id)) {
+      subjectsByCategory[cat].push(subj);
+    }
+  });
 
   const renderItem = ({ item }: { item: LibraryBook }) => (
     <View style={styles.card}>
@@ -195,15 +222,27 @@ export default function LibraryScreen() {
                 </TouchableOpacity>
               </View>
               <ScrollView contentContainerStyle={styles.scrollBody}>
-                {allSubjects.map((subj) => (
-                  <TouchableOpacity
-                    key={subj.id}
-                    style={styles.subjectRow}
-                    onPress={() => handleSelectDomain(subj)}
-                  >
-                    <Text style={styles.subjectName}>{subj.name}</Text>
-                  </TouchableOpacity>
-                ))}
+                {Object.keys(subjectsByCategory).map((category) => {
+                  const subjects = subjectsByCategory[category] || [];
+                  if (subjects.length === 0) return null;
+
+                  return (
+                    <View key={category} style={styles.categoryGroup}>
+                      <View style={styles.categoryHeaderRow}>
+                        <Text style={styles.categoryHeader}>{category}</Text>
+                      </View>
+                      {subjects.map((subj) => (
+                        <TouchableOpacity
+                          key={subj.id}
+                          style={styles.subjectRow}
+                          onPress={() => handleSelectDomain(subj)}
+                        >
+                          <Text style={styles.subjectName}>{subj.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  );
+                })}
               </ScrollView>
             </View>
           </SafeAreaView>
@@ -362,6 +401,22 @@ const styles = StyleSheet.create({
   },
   scrollBody: {
     padding: SPACING.lg,
+  },
+  categoryGroup: {
+    marginBottom: SPACING.lg,
+  },
+  categoryHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.xs,
+  },
+  categoryHeader: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '700',
+    color: COLORS.primaryLight,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
   },
   subjectRow: {
     flexDirection: 'row',

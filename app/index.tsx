@@ -8,7 +8,6 @@ import {
   useWindowDimensions,
   ScrollView,
   ActivityIndicator,
-  Modal,
   Animated,
   Switch,
   PanResponder,
@@ -37,6 +36,23 @@ import { getSubjectById } from '../models/subjects';
 import { getModelInfo } from '../models/geminiModels';
 import { getDepthInfo } from '../models/depthLevels';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
+
+let NativeDragDropView: React.ComponentType<any> | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const module = require('expo-drag-drop-content-view');
+  NativeDragDropView = module.DragDropContentView || module.default;
+} catch {
+  NativeDragDropView = null;
+}
+
+let NativeClipboard: any = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  NativeClipboard = require('expo-clipboard');
+} catch {
+  NativeClipboard = null;
+}
 
 function toAppError(error: unknown): AppError {
   if (error instanceof ProofPalError) return error;
@@ -399,6 +415,32 @@ export default function MainScreen() {
     }
   };
 
+  const handlePasteChatImage = async () => {
+    try {
+      let clipboard = NativeClipboard;
+      if (!clipboard) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          clipboard = require('expo-clipboard');
+        } catch {
+          clipboard = null;
+        }
+      }
+      if (clipboard && clipboard.getImageAsync) {
+        const clipboardResult = await clipboard.getImageAsync({ format: 'png' });
+        if (clipboardResult && clipboardResult.data) {
+          const base64Data = clipboardResult.data;
+          const uri = base64Data.startsWith('data:')
+            ? base64Data
+            : `data:image/png;base64,${base64Data}`;
+          setChatImageUri(uri);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to paste image from clipboard:', e);
+    }
+  };
+
   const handleSendChat = async (text: string) => {
     if ((!text.trim() && !chatImageUri) || chatLoading || !result) return;
     
@@ -527,6 +569,136 @@ export default function MainScreen() {
   const activeSubjectName = proofExecutionDetails?.subjectName;
   const modelInfo = getModelInfo(activeModel);
   const depthInfo = getDepthInfo(activeDepth);
+
+  const renderChatContainer = () => {
+    const chatContent = (
+      <View style={{ flex: 1 }}>
+        <ScrollView
+          ref={chatScrollRef}
+          style={styles.unifiedScroll}
+          contentContainerStyle={styles.unifiedScrollContent}
+          showsVerticalScrollIndicator={true}
+        >
+          {/* Thread Header Badges */}
+          <View style={styles.threadHeaderBadges}>
+            {modelInfo && (
+              <View style={styles.modelBadge}>
+                <Text style={styles.modelBadgeText}>{modelInfo.badge}</Text>
+              </View>
+            )}
+            {depthInfo && (
+              <View style={[styles.depthBadge, { borderColor: `${depthInfo.color}66`, backgroundColor: `${depthInfo.color}1A` }]}>
+                <Text style={[styles.depthBadgeText, { color: depthInfo.color }]}>{depthInfo.label}</Text>
+              </View>
+            )}
+            {activeSubjectName && (
+              <View style={styles.subjectBadge}>
+                <Text style={styles.subjectBadgeText}>{activeSubjectName}</Text>
+              </View>
+            )}
+            {result && <VerdictBadge verdict={result.verdict} />}
+            {result && (
+              <Text style={styles.timestampText}>
+                {new Date(result.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </Text>
+            )}
+          </View>
+
+          {/* Initial AI Feedback */}
+          {result && (
+            <View style={styles.aiMessageContainer}>
+              <MarkdownRenderer content={result.feedbackMarkdown} />
+            </View>
+          )}
+
+          {/* Subsequent Chat Messages */}
+          {chatHistory.map((msg, index) => (
+            <View key={index} style={msg.role === 'user' ? styles.userMessageContainer : styles.aiMessageContainer}>
+              {msg.role === 'user' ? (
+                <View style={styles.userBubble}>
+                  {msg.imageUri && (
+                    <Image source={{ uri: msg.imageUri }} style={styles.userMessageImage} resizeMode="cover" />
+                  )}
+                  {!!msg.text && (
+                    <Text style={styles.userBubbleText}>{msg.text}</Text>
+                  )}
+                </View>
+              ) : (
+                <MarkdownRenderer content={msg.text} />
+              )}
+            </View>
+          ))}
+
+          {chatLoading && (
+            <View style={styles.chatLoadingRow}>
+              <ActivityIndicator color={COLORS.primaryLight} size="small" />
+              <Text style={styles.chatLoadingText}>ProofPal is thinking...</Text>
+            </View>
+          )}
+        </ScrollView>
+
+        {/* Chat Image Attachment Preview */}
+        {chatImageUri && (
+          <View style={styles.chatImagePreviewRow}>
+            <Image source={{ uri: chatImageUri }} style={styles.chatImagePreview} />
+            <TouchableOpacity onPress={() => setChatImageUri(null)} style={styles.removeImageButton}>
+              <Text style={styles.removeImageText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Fixed Chat Input Row */}
+        <View style={styles.chatInputRow}>
+          <TouchableOpacity onPress={handlePickChatImage} style={{ padding: SPACING.xs }}>
+            <Text style={{ fontSize: 20 }}>📷</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handlePasteChatImage} style={{ padding: SPACING.xs }}>
+            <Text style={{ fontSize: 20 }}>📋</Text>
+          </TouchableOpacity>
+          <TextInput
+            style={styles.chatInput}
+            placeholder="Ask a follow-up question..."
+            placeholderTextColor={COLORS.textMuted}
+            value={chatInput}
+            onChangeText={setChatInput}
+            onSubmitEditing={() => {
+              handleSendChat(chatInput);
+              setChatInput('');
+            }}
+          />
+          <TouchableOpacity
+            style={styles.chatSendButton}
+            onPress={() => {
+              handleSendChat(chatInput);
+              setChatInput('');
+            }}
+            disabled={chatLoading || (!chatInput.trim() && !chatImageUri)}
+          >
+            <Text style={styles.chatSendButtonText}>Send</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+
+    if (NativeDragDropView) {
+      const DragDropView = NativeDragDropView;
+      return (
+        <DragDropView
+          style={{ flex: 1 }}
+          allowedMimeTypes={['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']}
+          onDrop={(event: any) => {
+            const asset = event?.assets?.[0] ?? event?.nativeEvent?.assets?.[0];
+            if (asset?.uri) {
+              setChatImageUri(asset.uri);
+            }
+          }}
+        >
+          {chatContent}
+        </DragDropView>
+      );
+    }
+    return chatContent;
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -673,160 +845,66 @@ export default function MainScreen() {
       </ScrollView>
 
       {/* Bottom Sheet Feedback Overlay */}
-      <Modal visible={showFeedback} transparent animationType="slide" onRequestClose={closeSheet}>
-        <View style={styles.sheetOverlay}>
-          <TouchableOpacity style={styles.sheetBackdrop} activeOpacity={1} onPress={closeSheet} />
-          <Animated.View
-            style={[
-              styles.sheetContainer,
-              { height: sheetHeight, maxWidth: 720, transform: [{ translateY: sheetAnim }] },
-            ]}
-            {...panResponder.panHandlers}
-          >
-            <View style={styles.sheetHandle}>
-              <View style={styles.sheetHandleBar} />
-            </View>
-            <View style={styles.sheetHeader}>
-              <View style={styles.sheetHeaderLeft}>
-                <Text style={styles.sheetTitle}>Feedback</Text>
+      {showFeedback && (
+        <Animated.View
+          style={[StyleSheet.absoluteFill, { zIndex: 100 }]}
+          pointerEvents={showFeedback ? 'auto' : 'none'}
+        >
+          <View style={styles.sheetOverlay}>
+            <TouchableOpacity style={styles.sheetBackdrop} activeOpacity={1} onPress={closeSheet} />
+            <Animated.View
+              style={[
+                styles.sheetContainer,
+                { height: sheetHeight, maxWidth: 720, transform: [{ translateY: sheetAnim }] },
+              ]}
+            >
+              <View style={styles.sheetHandle} {...panResponder.panHandlers}>
+                <View style={styles.sheetHandleBar} />
               </View>
-              <TouchableOpacity
-                onPress={() => {
-                  if (lastSheetY.current === snapPeek) {
-                    fullyCloseSheet();
-                  } else {
-                    closeSheet();
-                  }
-                }}
-                style={styles.sheetCloseButton}
-                accessibilityRole="button"
-                accessibilityLabel="Minimize feedback"
-              >
-                <Text style={styles.sheetCloseText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.sheetBody}>
-              <KeyboardAvoidingView 
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
-                keyboardVerticalOffset={Platform.OS === 'ios' ? (Platform.isPad ? 20 : 0) : 0}
-                style={{ flex: 1 }}
-              >
-                {isLoading ? (
-                  <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color={COLORS.primaryLight} />
-                    <Text style={styles.loadingStageText}>{stageLabel(stage)}</Text>
-                  </View>
-                ) : result ? (
-                  <View style={{ flex: 1 }}>
-                    <ScrollView
-                      ref={chatScrollRef}
-                      style={styles.unifiedScroll}
-                      contentContainerStyle={styles.unifiedScrollContent}
-                      showsVerticalScrollIndicator={true}
-                    >
-                      {/* Thread Header Badges */}
-                      <View style={styles.threadHeaderBadges}>
-                        {modelInfo && (
-                          <View style={styles.modelBadge}>
-                            <Text style={styles.modelBadgeText}>{modelInfo.badge}</Text>
-                          </View>
-                        )}
-                        {depthInfo && (
-                          <View style={[styles.depthBadge, { borderColor: `${depthInfo.color}66`, backgroundColor: `${depthInfo.color}1A` }]}>
-                            <Text style={[styles.depthBadgeText, { color: depthInfo.color }]}>{depthInfo.label}</Text>
-                          </View>
-                        )}
-                        {activeSubjectName && (
-                          <View style={styles.subjectBadge}>
-                            <Text style={styles.subjectBadgeText}>{activeSubjectName}</Text>
-                          </View>
-                        )}
-                        <VerdictBadge verdict={result.verdict} />
-                        <Text style={styles.timestampText}>
-                          {new Date(result.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </Text>
-                      </View>
-
-                      {/* Initial AI Feedback */}
-                      <View style={styles.aiMessageContainer}>
-                        <MarkdownRenderer content={result.feedbackMarkdown} />
-                      </View>
-
-                      {/* Subsequent Chat Messages */}
-                      {chatHistory.map((msg, index) => (
-                        <View key={index} style={msg.role === 'user' ? styles.userMessageContainer : styles.aiMessageContainer}>
-                          {msg.role === 'user' ? (
-                            <View style={styles.userBubble}>
-                              {msg.imageUri && (
-                                <Image source={{ uri: msg.imageUri }} style={styles.userMessageImage} resizeMode="cover" />
-                              )}
-                              {!!msg.text && (
-                                <Text style={styles.userBubbleText}>{msg.text}</Text>
-                              )}
-                            </View>
-                          ) : (
-                            <MarkdownRenderer content={msg.text} />
-                          )}
-                        </View>
-                      ))}
-
-                      {chatLoading && (
-                        <View style={styles.chatLoadingRow}>
-                          <ActivityIndicator color={COLORS.primaryLight} size="small" />
-                          <Text style={styles.chatLoadingText}>ProofPal is thinking...</Text>
-                        </View>
-                      )}
-                    </ScrollView>
-
-                    {/* Chat Image Attachment Preview */}
-                    {chatImageUri && (
-                      <View style={styles.chatImagePreviewRow}>
-                        <Image source={{ uri: chatImageUri }} style={styles.chatImagePreview} />
-                        <TouchableOpacity onPress={() => setChatImageUri(null)} style={styles.removeImageButton}>
-                          <Text style={styles.removeImageText}>✕</Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-
-                    {/* Fixed Chat Input Row */}
-                    <View style={styles.chatInputRow}>
-                      <TouchableOpacity onPress={handlePickChatImage} style={{ padding: SPACING.xs }}>
-                        <Text style={{ fontSize: 20 }}>📷</Text>
-                      </TouchableOpacity>
-                      <TextInput
-                        style={styles.chatInput}
-                        placeholder="Ask a follow-up question..."
-                        placeholderTextColor={COLORS.textMuted}
-                        value={chatInput}
-                        onChangeText={setChatInput}
-                        onSubmitEditing={() => {
-                          handleSendChat(chatInput);
-                          setChatInput('');
-                        }}
-                      />
-                      <TouchableOpacity
-                        style={styles.chatSendButton}
-                        onPress={() => {
-                          handleSendChat(chatInput);
-                          setChatInput('');
-                        }}
-                        disabled={chatLoading || (!chatInput.trim() && !chatImageUri)}
-                      >
-                        <Text style={styles.chatSendButtonText}>Send</Text>
-                      </TouchableOpacity>
+              <View style={styles.sheetHeader} {...panResponder.panHandlers}>
+                <View style={styles.sheetHeaderLeft}>
+                  <Text style={styles.sheetTitle}>Feedback</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (lastSheetY.current === snapPeek) {
+                      fullyCloseSheet();
+                    } else {
+                      closeSheet();
+                    }
+                  }}
+                  style={styles.sheetCloseButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Minimize feedback"
+                >
+                  <Text style={styles.sheetCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.sheetBody}>
+                <KeyboardAvoidingView 
+                  behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+                  keyboardVerticalOffset={Platform.OS === 'ios' ? (Platform.isPad ? 20 : 0) : 0}
+                  style={{ flex: 1 }}
+                >
+                  {isLoading ? (
+                    <View style={styles.loadingContainer}>
+                      <ActivityIndicator size="large" color={COLORS.primaryLight} />
+                      <Text style={styles.loadingStageText}>{stageLabel(stage)}</Text>
                     </View>
-                  </View>
-                ) : (
-                  <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyTitle}>Drop a proof image and tap Check to get feedback</Text>
-                    <Text style={styles.emptySubtitle}>ProofPal will analyze your mathematical steps and provide tailored guidance.</Text>
-                  </View>
-                )}
-              </KeyboardAvoidingView>
-            </View>
-          </Animated.View>
-        </View>
-      </Modal>
+                  ) : result ? (
+                    renderChatContainer()
+                  ) : (
+                    <View style={styles.emptyContainer}>
+                      <Text style={styles.emptyTitle}>Drop a proof image and tap Check to get feedback</Text>
+                      <Text style={styles.emptySubtitle}>ProofPal will analyze your mathematical steps and provide tailored guidance.</Text>
+                    </View>
+                  )}
+                </KeyboardAvoidingView>
+              </View>
+            </Animated.View>
+          </View>
+        </Animated.View>
+      )}
 
       <ErrorDialog
         error={error}

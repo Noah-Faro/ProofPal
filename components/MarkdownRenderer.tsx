@@ -44,6 +44,7 @@ export function sanitizeFeedbackMarkdown(content: string): string {
 }
 
 const markdownStyle: MarkdownStyle & Record<string, unknown> = {
+  text: { color: COLORS.textPrimary },
   paragraph: { color: COLORS.textPrimary, fontSize: FONT_SIZES.md, lineHeight: 24, marginBottom: SPACING.sm },
   h1: { color: COLORS.primaryLight, fontSize: FONT_SIZES.xl, fontWeight: '700', marginTop: SPACING.md, marginBottom: SPACING.sm },
   h2: { color: COLORS.primaryLight, fontSize: FONT_SIZES.lg, fontWeight: '700', marginTop: SPACING.md, marginBottom: SPACING.xs },

@@ -56,6 +56,7 @@ export interface ProofCheckResult {
   depth: PedagogicalDepth;
   timestamp: number;
   chatHistory?: { role: 'user' | 'model'; text: string; imageUri?: string }[];
+  remotePdfName?: string;
 }
 
 export type AppErrorCode =

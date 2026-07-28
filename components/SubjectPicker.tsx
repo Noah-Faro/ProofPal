@@ -159,14 +159,21 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
   };
 
   const handleSaveNewDomain = async () => {
-    if (newDomainName.trim() && newDomainCategory) {
+    const name = newDomainName.trim();
+    const category = newDomainCategory.trim();
+
+    if (name && category) {
       const newSubj: MathSubject = {
         id: `custom_${Date.now()}`,
-        name: newDomainName.trim(),
-        category: newDomainCategory,
+        name: name,
+        category: category,
       };
       try {
         await addCustomSubject(newSubj);
+        if (!Object.keys(subjectsByCategory).includes(category)) {
+          await addCustomCategory(category);
+          setCustomCategories(prev => prev.includes(category) ? prev : [...prev, category]);
+        }
         setCustomSubjects(prev => [...prev, newSubj]);
         handleSelect(newSubj.id);
         setNewDomainModalVisible(false);
@@ -176,7 +183,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
         console.error(e);
       }
     } else {
-      Alert.alert('Error', 'Please enter a name and select a category.');
+      Alert.alert('Error', 'Please enter a name and category.');
     }
   };
 
@@ -280,7 +287,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
                             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                             accessibilityLabel={`Delete ${category} category`}
                           >
-                            <Text style={styles.deleteIconText}>🗑️</Text>
+                            <Text style={styles.deleteIconText}>✕</Text>
                           </TouchableOpacity>
                         )}
                       </View>
@@ -317,7 +324,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
                                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                                   accessibilityLabel={`Delete ${subj.name} subject`}
                                 >
-                                  <Text style={styles.deleteIconText}>🗑️</Text>
+                                  <Text style={styles.deleteIconText}>✕</Text>
                                 </TouchableOpacity>
                               )}
                               {isSelected && <Text style={styles.checkmark}>✓</Text>}
@@ -377,23 +384,37 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
                   placeholderTextColor={COLORS.textMuted}
                 />
                 
-                <Text style={[styles.inputLabel, { marginTop: SPACING.md }]}>Select Category</Text>
-                {Object.keys(subjectsByCategory).map(cat => (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[
-                      styles.categoryOptionRow,
-                      newDomainCategory === cat && styles.selectedRow
-                    ]}
-                    onPress={() => setNewDomainCategory(cat)}
-                  >
-                    <Text style={[
-                      styles.subjectName,
-                      newDomainCategory === cat && styles.selectedSubjectName
-                    ]}>{cat}</Text>
-                    {newDomainCategory === cat && <Text style={styles.checkmark}>✓</Text>}
-                  </TouchableOpacity>
-                ))}
+                <Text style={[styles.inputLabel, { marginTop: SPACING.md }]}>Category</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={newDomainCategory}
+                  onChangeText={setNewDomainCategory}
+                  placeholder="e.g. Analysis or type a new category"
+                  placeholderTextColor={COLORS.textMuted}
+                />
+
+                <Text style={styles.suggestionLabel}>Existing Categories:</Text>
+                <View style={styles.pillsContainer}>
+                  {Object.keys(subjectsByCategory).map((cat) => (
+                    <TouchableOpacity
+                      key={cat}
+                      style={[
+                        styles.categoryPill,
+                        newDomainCategory.trim() === cat && styles.categoryPillSelected,
+                      ]}
+                      onPress={() => setNewDomainCategory(cat)}
+                    >
+                      <Text
+                        style={[
+                          styles.categoryPillText,
+                          newDomainCategory.trim() === cat && styles.categoryPillTextSelected,
+                        ]}
+                      >
+                        {cat}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
                 
                 <TouchableOpacity style={styles.saveDomainButton} onPress={handleSaveNewDomain}>
                   <Text style={styles.saveDomainButtonText}>Save Domain</Text>
@@ -620,14 +641,39 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: SPACING.xs,
   },
-  categoryOptionRow: {
+  suggestionLabel: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.xs,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.xs,
+  },
+  pillsContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-    borderRadius: BORDER_RADIUS.md,
-    marginBottom: 4,
+    flexWrap: 'wrap',
+    marginTop: SPACING.xs,
+  },
+  categoryPill: {
+    paddingHorizontal: SPACING.sm + 2,
+    paddingVertical: SPACING.xs + 2,
+    borderRadius: BORDER_RADIUS.full,
+    backgroundColor: COLORS.bgSurface,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    marginBottom: SPACING.xs,
+    marginRight: SPACING.xs,
+  },
+  categoryPillSelected: {
+    backgroundColor: 'rgba(99, 102, 241, 0.2)',
+    borderColor: COLORS.primary,
+  },
+  categoryPillText: {
+    fontSize: FONT_SIZES.xs + 1,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+  },
+  categoryPillTextSelected: {
+    color: COLORS.primaryLight,
+    fontWeight: '700',
   },
   saveDomainButton: {
     backgroundColor: COLORS.primary,

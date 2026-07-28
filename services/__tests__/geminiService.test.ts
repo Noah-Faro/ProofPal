@@ -1,6 +1,6 @@
 import { GeminiModel, PedagogicalDepth } from '../../models/types';
 import { ProofPalError } from '../../types/proof';
-import { checkProof } from '../geminiService';
+import { checkProof, sendFollowUpMessage } from '../geminiService';
 
 const mockGenerateContent = jest.fn();
 const mockUpload = jest.fn();
@@ -11,10 +11,14 @@ const mockGetApiKey = jest.fn();
 const mockFileBase64 = jest.fn<Promise<string>, []>();
 const mockFileSizes = new Map<string, number>();
 
+const mockSendMessage = jest.fn().mockResolvedValue({ text: 'Follow-up answer' });
+const mockChatsCreate = jest.fn().mockImplementation(() => ({ sendMessage: mockSendMessage }));
+
 jest.mock('@google/genai', () => ({
   GoogleGenAI: jest.fn().mockImplementation(() => ({
     models: { generateContent: mockGenerateContent },
     files: { upload: mockUpload, get: mockGetFile, delete: mockDeleteFile },
+    chats: { create: mockChatsCreate },
   })),
   FileState: { PROCESSING: 'PROCESSING', ACTIVE: 'ACTIVE', FAILED: 'FAILED' },
   createPartFromUri: (...args: [string, string]) => mockCreatePartFromUri(...args),
@@ -74,7 +78,7 @@ describe('checkProof', () => {
     expect(generationRequest.contents[0].parts[2].inlineData).toEqual({ data: 'Y29udGV4dA==', mimeType: 'image/png' });
   });
 
-  it('uploads, polls, attaches, and deletes a course PDF', async () => {
+  it('uploads, polls, and attaches a course PDF without deleting it', async () => {
     jest.useFakeTimers();
     mockUpload.mockResolvedValue({ name: 'files/course', state: 'PROCESSING' });
     mockGetFile.mockResolvedValue({
@@ -91,18 +95,18 @@ describe('checkProof', () => {
       },
     });
     await jest.advanceTimersByTimeAsync(2_000);
-    await expect(pending).resolves.toMatchObject({ verdict: 'correct' });
+    await expect(pending).resolves.toMatchObject({ verdict: 'correct', remotePdfName: 'files/course' });
 
     expect(mockUpload).toHaveBeenCalledWith(expect.objectContaining({
       config: expect.objectContaining({ mimeType: 'application/pdf' }),
     }));
     expect(mockGetFile).toHaveBeenCalledWith(expect.objectContaining({ name: 'files/course' }));
     expect(mockCreatePartFromUri).toHaveBeenCalledWith('https://files.example/course', 'application/pdf');
-    expect(mockDeleteFile).toHaveBeenCalledWith(expect.objectContaining({ name: 'files/course' }));
+    expect(mockDeleteFile).not.toHaveBeenCalled();
     jest.useRealTimers();
   });
 
-  it('deletes a PDF that fails processing before evaluation', async () => {
+  it('fails processing a bad PDF before evaluation without deleting', async () => {
     mockUpload.mockResolvedValue({ name: 'files/bad', state: 'FAILED' });
 
     await expect(checkProof({
@@ -113,10 +117,10 @@ describe('checkProof', () => {
     })).rejects.toMatchObject<Partial<ProofPalError>>({ code: 'PDF_PROCESSING_FAILED' });
 
     expect(mockGenerateContent).not.toHaveBeenCalled();
-    expect(mockDeleteFile).toHaveBeenCalledWith(expect.objectContaining({ name: 'files/bad' }));
+    expect(mockDeleteFile).not.toHaveBeenCalled();
   });
 
-  it('times out PDF processing and still deletes the temporary upload', async () => {
+  it('times out PDF processing without deleting', async () => {
     jest.useFakeTimers();
     mockUpload.mockResolvedValue({ name: 'files/slow', state: 'PROCESSING' });
     mockGetFile.mockResolvedValue({ name: 'files/slow', state: 'PROCESSING' });
@@ -131,7 +135,7 @@ describe('checkProof', () => {
     await expectation;
 
     expect(mockGenerateContent).not.toHaveBeenCalled();
-    expect(mockDeleteFile).toHaveBeenCalledWith(expect.objectContaining({ name: 'files/slow' }));
+    expect(mockDeleteFile).not.toHaveBeenCalled();
     jest.useRealTimers();
   });
 
@@ -185,5 +189,43 @@ describe('checkProof', () => {
       code: 'NETWORK',
       message: 'No internet connection. Check your network and try again.',
     });
+  });
+});
+
+describe('sendFollowUpMessage', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetApiKey.mockResolvedValue('test-key');
+    mockSendMessage.mockResolvedValue({ text: 'Follow-up answer' });
+  });
+
+  it('uses startChat and passes remotePdfName inline reference when provided', async () => {
+    const response = await sendFollowUpMessage(
+      'Why is step 2 wrong?',
+      'Step 2 contains an algebraic error.',
+      [{ role: 'user', text: 'Check proof' }, { role: 'model', text: 'Step 2 contains an algebraic error.' }],
+      { model: GeminiModel.FLASH_36, depth: PedagogicalDepth.GUIDE },
+      undefined,
+      'files/textbook123'
+    );
+
+    expect(response).toBe('Follow-up answer');
+    expect(mockChatsCreate).toHaveBeenCalledWith(expect.objectContaining({
+      model: GeminiModel.FLASH_36,
+      config: expect.objectContaining({
+        systemInstruction: expect.stringContaining('Referenced Textbook File: files/textbook123'),
+      }),
+      history: expect.arrayContaining([
+        expect.objectContaining({
+          role: 'user',
+          parts: expect.arrayContaining([
+            expect.objectContaining({
+              fileData: expect.objectContaining({ fileUri: 'https://generativelanguage.googleapis.com/v1beta/files/textbook123' }),
+            }),
+          ]),
+        }),
+      ]),
+    }));
+    expect(mockSendMessage).toHaveBeenCalledWith({ message: [{ text: 'Why is step 2 wrong?' }] });
   });
 });

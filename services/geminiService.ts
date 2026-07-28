@@ -106,49 +106,43 @@ export async function checkProof(request: ProofCheckRequest): Promise<ProofCheck
     assertCombinedInlineImageSize(parts);
 
     let remotePdfName: string | undefined;
-    try {
-      if (request.exerciseContext?.coursePdf) {
-        request.onStageChange?.('uploading-pdf');
-        const uploadedPdf = await uploadAndProcessPdf(
-          ai,
-          request.exerciseContext.coursePdf,
-          request.signal,
-          (name) => {
-            remotePdfName = name;
-          },
-          () => request.onStageChange?.('processing-pdf'),
-        );
-        if (!uploadedPdf.uri || !uploadedPdf.mimeType) {
-          throw new ProofPalError('PDF_PROCESSING_FAILED', 'The uploaded PDF could not be used.', true, 'retry');
-        }
-        parts.push(createPartFromUri(uploadedPdf.uri, uploadedPdf.mimeType));
-      }
-
-      request.onStageChange?.('evaluating');
-      const response = await ai.models.generateContent({
-        model: request.model,
-        contents: [{ role: 'user', parts }],
-        config: {
-          systemInstruction: buildSystemPrompt({ depth: request.depth, subject: request.subject, concise: request.concise, thinking: request.thinking }),
-          responseMimeType: 'application/json',
-          responseSchema: PROOF_RESULT_SCHEMA,
-          abortSignal: request.signal,
-          httpOptions: { timeout: GENERATION_TIMEOUT_MS },
-          ...(request.thinking && {
-            thinkingConfig: {
-              thinkingLevel: 'HIGH',
-              includeThoughts: false,
-            }
-          } as any),
+    if (request.exerciseContext?.coursePdf) {
+      request.onStageChange?.('uploading-pdf');
+      const uploadedPdf = await uploadAndProcessPdf(
+        ai,
+        request.exerciseContext.coursePdf,
+        request.signal,
+        (name) => {
+          remotePdfName = name;
         },
-      });
-
-      return parseProofResult(response.text, request);
-    } finally {
-      if (remotePdfName) {
-        await deleteRemotePdf(ai, remotePdfName);
+        () => request.onStageChange?.('processing-pdf'),
+      );
+      if (!uploadedPdf.uri || !uploadedPdf.mimeType) {
+        throw new ProofPalError('PDF_PROCESSING_FAILED', 'The uploaded PDF could not be used.', true, 'retry');
       }
+      parts.push(createPartFromUri(uploadedPdf.uri, uploadedPdf.mimeType));
     }
+
+    request.onStageChange?.('evaluating');
+    const response = await ai.models.generateContent({
+      model: request.model,
+      contents: [{ role: 'user', parts }],
+      config: {
+        systemInstruction: buildSystemPrompt({ depth: request.depth, subject: request.subject, concise: request.concise, thinking: request.thinking }),
+        responseMimeType: 'application/json',
+        responseSchema: PROOF_RESULT_SCHEMA,
+        abortSignal: request.signal,
+        httpOptions: { timeout: GENERATION_TIMEOUT_MS },
+        ...(request.thinking && {
+          thinkingConfig: {
+            thinkingLevel: 'HIGH',
+            includeThoughts: false,
+          }
+        } as any),
+      },
+    });
+
+    return parseProofResult(response.text, request, remotePdfName);
   } catch (error) {
     throw toProofPalError(error);
   }
@@ -247,17 +241,7 @@ async function getFileWithRetry(ai: GoogleGenAI, name: string, signal?: AbortSig
   throw toProofPalError(lastError, 'Could not check whether the course PDF finished processing.');
 }
 
-async function deleteRemotePdf(ai: GoogleGenAI, name: string): Promise<void> {
-  try {
-    await ai.files.delete({
-      name,
-      config: { httpOptions: { timeout: 10_000 } },
-    });
-  } catch {
-    // Gemini expires Files automatically. Cleanup should never replace a
-    // successful proof evaluation with an unrelated delete failure.
-  }
-}
+
 
 function assertPdfAttachment(attachment: LocalAttachment): void {
   if (!attachment.uri || !attachment.name || attachment.mimeType.toLowerCase() !== 'application/pdf') {
@@ -295,7 +279,7 @@ function assertCombinedInlineImageSize(parts: Part[]): void {
   }
 }
 
-function parseProofResult(responseText: string | undefined, request: ProofCheckRequest): ProofCheckResult {
+function parseProofResult(responseText: string | undefined, request: ProofCheckRequest, remotePdfName?: string): ProofCheckResult {
   if (!responseText) {
     throw new ProofPalError('INVALID_RESPONSE', 'Gemini returned an empty proof evaluation. Please retry.', true, 'retry');
   }
@@ -310,6 +294,7 @@ function parseProofResult(responseText: string | undefined, request: ProofCheckR
       model: request.model,
       depth: request.depth,
       timestamp: Date.now(),
+      ...(remotePdfName ? { remotePdfName } : {}),
     };
   } catch {
     throw new ProofPalError('INVALID_RESPONSE', 'Gemini returned an invalid proof evaluation. Please retry.', true, 'retry');
@@ -408,7 +393,8 @@ export async function sendFollowUpMessage(
   currentFeedback: string,
   previousChat: { role: 'user' | 'model'; text: string }[],
   config: { model: GeminiModel; depth: PedagogicalDepth },
-  imageUri?: string
+  imageUri?: string,
+  remotePdfName?: string
 ): Promise<string> {
   const apiKey = await getApiKey();
   if (!apiKey?.trim()) {
@@ -423,15 +409,30 @@ export async function sendFollowUpMessage(
   try {
     const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
     
-    const history = previousChat.map(msg => ({
+    const history: { role: 'user' | 'model'; parts: Part[] }[] = previousChat.map(msg => ({
       role: msg.role,
       parts: [{ text: msg.text }]
     }));
 
+    if (remotePdfName) {
+      const pdfPart = createPartFromUri(
+        remotePdfName.startsWith('http') ? remotePdfName : `https://generativelanguage.googleapis.com/v1beta/${remotePdfName.startsWith('files/') ? remotePdfName : 'files/' + remotePdfName}`,
+        'application/pdf'
+      );
+      if (history.length > 0 && history[0].role === 'user') {
+        history[0].parts.unshift(pdfPart);
+      } else {
+        history.unshift(
+          { role: 'user', parts: [pdfPart, { text: 'Course textbook reference PDF attached.' }] },
+          { role: 'model', parts: [{ text: 'Understood. I have access to the course textbook reference.' }] }
+        );
+      }
+    }
+
     const systemInstruction = `You are a helpful pedagogical math assistant. The user is asking a follow-up question about their proof evaluation.
 Current Feedback Provided to User:
 ${currentFeedback}
-Pedagogical Depth: ${config.depth}`;
+Pedagogical Depth: ${config.depth}${remotePdfName ? `\nReferenced Textbook File: ${remotePdfName}` : ''}`;
 
     const userParts: Part[] = [];
     if (message) {
@@ -442,19 +443,16 @@ Pedagogical Depth: ${config.depth}`;
       userParts.push({ inlineData: { data: base64, mimeType: 'image/jpeg' } });
     }
 
-    const contents = [
-      ...history,
-      { role: 'user', parts: userParts }
-    ];
-
-    const response = await ai.models.generateContent({
+    const chat = ai.chats.create({
       model: config.model,
-      contents,
       config: {
         systemInstruction,
         httpOptions: { timeout: GENERATION_TIMEOUT_MS },
       },
+      history: history as any, // Cast to any to bypass strict type-checking on Content role
     });
+
+    const response = await chat.sendMessage({ message: userParts });
 
     if (!response.text) {
       throw new Error('Empty response');
