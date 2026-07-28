@@ -25,7 +25,7 @@ export function sanitizeFeedbackMarkdown(content: string): string {
 
   // 2. Extract math blocks into placeholders to protect them
   const mathBlocks: string[] = [];
-  let placeholderText = cleaned.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$)/g, (match) => {
+  let placeholderText = cleaned.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|\\\[[\s\S]*?\\\]|\\\((?:[^\\\n]|\\(?!\)))*?\\\))/g, (match) => {
     mathBlocks.push(match);
     return `___MATH_BLOCK_${mathBlocks.length - 1}___`;
   });
@@ -34,7 +34,7 @@ export function sanitizeFeedbackMarkdown(content: string): string {
   placeholderText = sanitizeLatex(placeholderText);
 
   // Protect any math blocks created by sanitizeLatex
-  placeholderText = placeholderText.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$)/g, (match) => {
+  placeholderText = placeholderText.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|\\\[[\s\S]*?\\\]|\\\((?:[^\\\n]|\\(?!\)))*?\\\))/g, (match) => {
     mathBlocks.push(match);
     return `___MATH_BLOCK_${mathBlocks.length - 1}___`;
   });
@@ -42,10 +42,24 @@ export function sanitizeFeedbackMarkdown(content: string): string {
   // 4. Double-escape backslashes on the text ONLY
   const textWithEscapedBackslashes = placeholderText.replace(/\\/g, '\\\\');
 
-  // 5. Restore math blocks without double-escaping them
+  // 5. Restore math blocks without double-escaping them, and standardize on $ / $$
   return textWithEscapedBackslashes.replace(/___MATH_BLOCK_(\d+)___/g, (_, indexStr) => {
     const idx = parseInt(indexStr, 10);
-    return mathBlocks[idx] ?? '';
+    let block = mathBlocks[idx] ?? '';
+    
+    if (block.startsWith('\\[') && block.endsWith('\\]')) {
+      block = '$$' + block.slice(2, -2) + '$$';
+    } else if (block.startsWith('\\(') && block.endsWith('\\)')) {
+      block = '$' + block.slice(2, -2) + '$';
+    }
+    
+    // Fix squashed commands inside math blocks, e.g., \leqm -> \leq m
+    block = block.replace(/\\(leq|le|geq|ge|neq|ne|approx|in|subset|cup|cap|to|rightarrow)([a-zA-Z]+)/g, (match, cmd, letters) => {
+      if (['left', 'right', 'inf', 'int', 'sub', 'sup', 'text', 'begin', 'end'].includes(cmd + letters)) return match;
+      return '\\' + cmd + ' ' + letters;
+    });
+    
+    return block;
   });
 }
 

@@ -28,8 +28,8 @@ const MAX_COMBINED_INLINE_IMAGE_BYTES = 13 * 1024 * 1024;
 const UPLOAD_TIMEOUT_MS = 60_000;
 const GENERATION_TIMEOUT_MS = 90_000;
 const PDF_PROCESSING_TIMEOUT_MS = 120_000;
-const PDF_POLL_INTERVAL_MS = 2_000;
-const PDF_POLL_RETRY_DELAYS_MS = [1_000, 2_000] as const;
+const PDF_POLL_INTERVAL_MS = 8_000;
+const PDF_POLL_RETRY_DELAYS_MS = [5_000, 10_000] as const;
 
 const PROOF_RESULT_SCHEMA = {
   type: 'OBJECT',
@@ -439,8 +439,8 @@ Pedagogical Depth: ${config.depth}${remotePdfName ? `\nReferenced Textbook File:
       userParts.push({ text: message });
     }
     if (imageUri) {
-      const base64 = await ExpoFile.readAsStringAsync(imageUri, { encoding: 'base64' });
-      userParts.push({ inlineData: { data: base64, mimeType: 'image/jpeg' } });
+      const prepared = await prepareImageForApi(imageUri);
+      userParts.push({ inlineData: { data: prepared.data, mimeType: prepared.mimeType } });
     }
 
     const chat = ai.chats.create({
