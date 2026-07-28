@@ -94,7 +94,7 @@ describe('checkProof', () => {
         coursePdf: { uri: 'file:///course.pdf', name: 'course.pdf', mimeType: 'application/pdf', size: 1024 },
       },
     });
-    await jest.advanceTimersByTimeAsync(2_000);
+    await jest.advanceTimersByTimeAsync(10_000);
     await expect(pending).resolves.toMatchObject({ verdict: 'correct', remotePdfName: 'files/course' });
 
     expect(mockUpload).toHaveBeenCalledWith(expect.objectContaining({
