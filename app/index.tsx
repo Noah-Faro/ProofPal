@@ -16,7 +16,6 @@ import {
   Platform,
   Image,
   Modal,
-  Keyboard,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
@@ -127,8 +126,6 @@ export default function MainScreen() {
   const [chatLoading, setChatLoading] = useState(false);
   const [chatImageUri, setChatImageUri] = useState<string | null>(null);
   const [fullScreenImageUri, setFullScreenImageUri] = useState<string | null>(null);
-  const [keyboardSpacerHeight, setKeyboardSpacerHeight] = useState(0);
-  const [isInputFocused, setIsInputFocused] = useState(false);
   const [customSubjects, setCustomSubjects] = useState<MathSubject[]>([]);
 
   const [proofExecutionDetails, setProofExecutionDetails] = useState<{
@@ -141,7 +138,6 @@ export default function MainScreen() {
   const [topBarHeight, setTopBarHeight] = useState(60);
   const [sheetHeaderHeight, setSheetHeaderHeight] = useState(50);
 
-  const mainKeyboardOffset = Platform.OS === 'ios' ? topBarHeight + insets.top : 0;
   const sheetKeyboardOffset = Platform.OS === 'ios' ? sheetHeaderHeight + insets.top : 0;
 
   const requestId = useRef(0);
@@ -338,12 +334,6 @@ export default function MainScreen() {
       void refreshAvailableBooks(selectedSubjectId);
     }
   }, [loadSettings, refreshAvailableBooks, selectedSubjectId]));
-
-  useEffect(() => {
-    const showSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', (e) => setKeyboardSpacerHeight(e.endCoordinates.height));
-    const hideSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKeyboardSpacerHeight(0));
-    return () => { showSub.remove(); hideSub.remove(); };
-  }, []);
 
   useEffect(() => {
     mounted.current = true;
@@ -741,12 +731,13 @@ export default function MainScreen() {
         </View>
       </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={mainKeyboardOffset}
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        automaticallyAdjustKeyboardInsets={true}
+        keyboardDismissMode="interactive"
       >
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
           <DropZone currentImage={proofImage} onImageReceived={handleProofImage} onClear={() => { setProofImage(undefined); clearFeedback(); }} disabled={isLoading} />
         </View>
@@ -782,8 +773,6 @@ export default function MainScreen() {
             availableBooks={availableBooks}
             selectedBookId={selectedBookId}
             onSelectBook={handleSelectBook}
-            onFocus={() => setIsInputFocused(true)}
-            onBlur={() => setIsInputFocused(false)}
           />
         </View>
 
@@ -812,40 +801,36 @@ export default function MainScreen() {
         </View>
 
         {/* Action Buttons Row */}
-        {!isInputFocused && (
-          <View style={styles.actionRow}>
-            <TouchableOpacity
-              style={[styles.checkButton, (!proofImage || isLoading) && styles.checkButtonDisabled]}
-              onPress={() => void handleCheckProof()}
-              disabled={!proofImage || isLoading}
-              accessibilityRole="button"
-              accessibilityLabel="Check proof"
-            >
-              {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.checkButtonText}>Check Proof</Text>}
-            </TouchableOpacity>
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.checkButton, (!proofImage || isLoading) && styles.checkButtonDisabled]}
+            onPress={() => void handleCheckProof()}
+            disabled={!proofImage || isLoading}
+            accessibilityRole="button"
+            accessibilityLabel="Check proof"
+          >
+            {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.checkButtonText}>Check Proof</Text>}
+          </TouchableOpacity>
 
-            {(proofImage || exerciseContext.reference || exerciseContext.sourceText || exerciseContext.sourceImage || exerciseContext.coursePdf) && (
-              <TouchableOpacity
-                style={styles.resetButton}
-                onPress={handleReset}
-                disabled={isLoading}
-                accessibilityRole="button"
-                accessibilityLabel="Reset all"
-              >
-                <Text style={styles.resetButtonText}>✕</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+          {(proofImage || exerciseContext.reference || exerciseContext.sourceText || exerciseContext.sourceImage || exerciseContext.coursePdf) && (
+            <TouchableOpacity
+              style={styles.resetButton}
+              onPress={handleReset}
+              disabled={isLoading}
+              accessibilityRole="button"
+              accessibilityLabel="Reset all"
+            >
+              <Text style={styles.resetButtonText}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         {isLoading && (
           <TouchableOpacity style={styles.cancelButton} onPress={handleCancel} accessibilityRole="button" accessibilityLabel="Cancel proof check">
             <Text style={styles.cancelButtonText}>Cancel</Text>
           </TouchableOpacity>
         )}
-        <View style={{ height: keyboardSpacerHeight ? keyboardSpacerHeight : 0 }} />
       </ScrollView>
-      </KeyboardAvoidingView>
 
       {/* Bottom Sheet Feedback Overlay */}
       {showFeedback && (
