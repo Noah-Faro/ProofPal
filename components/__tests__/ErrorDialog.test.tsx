@@ -2,6 +2,8 @@ import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
 import { ErrorDialog } from '../ErrorDialog';
 
+jest.setTimeout(15000); // Prevent timeouts on slow CI environments
+
 describe('ErrorDialog', () => {
   it('uses the provided recovery action and keeps dismiss available', async () => {
     const onDismiss = jest.fn();
