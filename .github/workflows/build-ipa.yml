@@ -45,8 +45,8 @@ jobs:
           cd ios
           # Build the release app for physical devices, skipping code signing
           xcodebuild \
-            -workspace ProofPal.xcworkspace \
-            -scheme ProofPal \
+            -workspace Scribe.xcworkspace \
+            -scheme Scribe \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath build \
@@ -58,12 +58,12 @@ jobs:
         run: |
           cd ios/build/Build/Products/Release-iphoneos
           mkdir Payload
-          cp -R ProofPal.app Payload
-          zip -r ProofPal.ipa Payload
+          cp -R Scribe.app Payload
+          zip -r Scribe.ipa Payload
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ProofPal-Unsigned-IPA
-          path: ios/build/Build/Products/Release-iphoneos/ProofPal.ipa
+          name: Scribe-Unsigned-IPA
+          path: ios/build/Build/Products/Release-iphoneos/Scribe.ipa
           retention-days: 7
