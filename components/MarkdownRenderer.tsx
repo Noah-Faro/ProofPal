@@ -64,6 +64,9 @@ export function sanitizeFeedbackMarkdown(content: string): string {
     // Convert ||...|| to \lVert ... \rVert
     block = block.replace(/\|\|([\s\S]*?)\|\|/g, '\\\\lVert $1 \\\\rVert');
     
+    // Convert ... to \dots
+    block = block.replace(/\.\.\./g, '\\\\dots');
+    
     // Fix squashed commands inside math blocks, e.g., \leqm -> \leq m
     block = block.replace(/\\(leq|le|geq|ge|neq|ne|approx|in|subset|cup|cap|to|rightarrow)([a-zA-Z]+)/g, (match, cmd, letters) => {
       if (['left', 'right', 'inf', 'int', 'sub', 'sup', 'text', 'begin', 'end'].includes(cmd + letters)) return match;
