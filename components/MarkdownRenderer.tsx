@@ -78,7 +78,7 @@ const markdownStyle: MarkdownStyle = {
   list: { color: COLORS.textPrimary, bulletColor: COLORS.textPrimary, markerColor: COLORS.textPrimary },
   code: { color: COLORS.accent, backgroundColor: COLORS.bgSurface },
   codeBlock: { color: COLORS.textPrimary, backgroundColor: COLORS.bgSurface, padding: SPACING.sm },
-  blockquote: { color: COLORS.textPrimary, backgroundColor: COLORS.bgSurface, borderColor: COLORS.primary, borderWidth: 1, padding: SPACING.sm, borderRadius: BORDER_RADIUS.sm, overflow: 'hidden' },
+  blockquote: { color: COLORS.textPrimary, backgroundColor: COLORS.bgSurface, borderColor: COLORS.primary, borderWidth: 1 },
   link: { color: COLORS.primaryLight },
   math: { color: COLORS.textPrimary, backgroundColor: COLORS.bgSurface, padding: SPACING.sm },
   inlineMath: { color: COLORS.textPrimary },

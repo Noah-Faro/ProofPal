@@ -29,11 +29,11 @@ import { ModelBadge } from '../components/ModelBadge';
 import { ErrorDialog } from '../components/ErrorDialog';
 import { checkProof, sendFollowUpMessage } from '../services/geminiService';
 import { prepareImageForApi } from '../utilities/imageHelper';
-import { DEFAULT_APP_SETTINGS, loadAppSettings, updateAppSettings, saveHistoryEntry, updateHistoryEntry } from '../utilities/settings';
-import { GeminiModel, type AppSettings, type HistoryEntry, PedagogicalDepth } from '../models/types';
+import { DEFAULT_APP_SETTINGS, loadAppSettings, updateAppSettings, saveHistoryEntry, updateHistoryEntry, loadCustomSubjects } from '../utilities/settings';
+import { GeminiModel, type AppSettings, type HistoryEntry, PedagogicalDepth, MathSubject } from '../models/types';
 import type { AppError, LocalAttachment, ProofCheckResult, ProofCheckStage, ProofExerciseContext, ProofVerdict } from '../types/proof';
 import { ProofPalError } from '../types/proof';
-import { getSubjectById, loadCustomSubjects } from '../models/subjects';
+import { getSubjectById } from '../models/subjects';
 import { getModelInfo } from '../models/geminiModels';
 import { getDepthInfo } from '../models/depthLevels';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
@@ -645,7 +645,7 @@ export default function MainScreen() {
               {msg.role === 'user' ? (
                 <View style={styles.userBubble}>
                   {msg.imageUri && (
-                    <TouchableOpacity onPress={() => setFullScreenImageUri(msg.imageUri)}>
+                    <TouchableOpacity onPress={() => setFullScreenImageUri(msg.imageUri ?? null)}>
                       <Image source={{ uri: msg.imageUri }} style={styles.userMessageImage} resizeMode="cover" />
                     </TouchableOpacity>
                   )}
