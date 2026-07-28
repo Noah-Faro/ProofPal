@@ -134,6 +134,12 @@ export async function checkProof(request: ProofCheckRequest): Promise<ProofCheck
           responseSchema: PROOF_RESULT_SCHEMA,
           abortSignal: request.signal,
           httpOptions: { timeout: GENERATION_TIMEOUT_MS },
+          ...(request.thinking && {
+            thinkingConfig: {
+              thinkingLevel: 'HIGH',
+              includeThoughts: false,
+            }
+          } as any),
         },
       });
 
