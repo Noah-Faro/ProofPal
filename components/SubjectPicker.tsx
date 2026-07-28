@@ -101,9 +101,10 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteCustomSubject(id);
               if (onDeleteSubject) {
                 onDeleteSubject(id);
+              } else {
+                await deleteCustomSubject(id);
               }
             } catch (e) {
               console.error('Failed to delete custom subject', e);
@@ -163,27 +164,38 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
     const name = newDomainName.trim();
     const category = newDomainCategory.trim();
 
-    if (name && category) {
-      const newSubj: MathSubject = {
-        id: `custom_${Date.now()}`,
-        name: name,
-        category: category,
-      };
-      try {
-        await addCustomSubject(newSubj);
-        if (!Object.keys(subjectsByCategory).includes(category)) {
-          await addCustomCategory(category);
-          setCustomCategories(prev => prev.includes(category) ? prev : [...prev, category]);
-        }
-        onCustomSubjectAdded(newSubj);
-        handleSelect(newSubj.id);
-        setNewDomainName('');
-        setNewDomainCategory('');
-      } catch (e) {
-        console.error(e);
-      }
-    } else {
+    if (!name || !category) {
       Alert.alert('Error', 'Please enter a name and category.');
+      return;
+    }
+
+    const normalizedName = name.normalize('NFC').toLowerCase();
+    const isDuplicate =
+      MATH_SUBJECTS.some((s) => s.name.normalize('NFC').toLowerCase() === normalizedName) ||
+      customSubjects.some((s) => s.name.normalize('NFC').toLowerCase() === normalizedName);
+
+    if (isDuplicate) {
+      Alert.alert('Duplicate Domain', 'A domain with this name already exists.');
+      return;
+    }
+
+    const newSubj: MathSubject = {
+      id: `custom_${Date.now()}`,
+      name: name,
+      category: category,
+    };
+    try {
+      await addCustomSubject(newSubj);
+      if (!Object.keys(subjectsByCategory).includes(category)) {
+        await addCustomCategory(category);
+        setCustomCategories((prev) => (prev.includes(category) ? prev : [...prev, category]));
+      }
+      onCustomSubjectAdded(newSubj);
+      handleSelect(newSubj.id);
+      setNewDomainName('');
+      setNewDomainCategory('');
+    } catch (e) {
+      console.error(e);
     }
   };
 

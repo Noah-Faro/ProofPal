@@ -16,6 +16,7 @@ import {
   Platform,
   Image,
   Modal,
+  Alert,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
@@ -28,7 +29,7 @@ import { ModelBadge } from '../components/ModelBadge';
 import { ErrorDialog } from '../components/ErrorDialog';
 import { checkProof, sendFollowUpMessage } from '../services/geminiService';
 import { prepareImageForApi } from '../utilities/imageHelper';
-import { DEFAULT_APP_SETTINGS, loadAppSettings, updateAppSettings, saveHistoryEntry, updateHistoryEntry, loadCustomSubjects } from '../utilities/settings';
+import { DEFAULT_APP_SETTINGS, loadAppSettings, updateAppSettings, saveHistoryEntry, updateHistoryEntry, loadCustomSubjects, deleteCustomSubject } from '../utilities/settings';
 import { GeminiModel, type AppSettings, type HistoryEntry, PedagogicalDepth, MathSubject } from '../models/types';
 import type { AppError, LocalAttachment, ProofCheckResult, ProofCheckStage, ProofExerciseContext, ProofVerdict } from '../types/proof';
 import { ProofPalError } from '../types/proof';
@@ -302,7 +303,9 @@ export default function MainScreen() {
   const loadSettings = useCallback(async () => {
     try {
       const next = await loadAppSettings();
+      const subjects = await loadCustomSubjects();
       if (!mounted.current) return;
+      setCustomSubjects(subjects);
       const changed = hydratedPreferences.current !== null && (
         hydratedPreferences.current.selectedModel !== next.selectedModel ||
         hydratedPreferences.current.selectedDepth !== next.selectedDepth ||
@@ -372,7 +375,7 @@ export default function MainScreen() {
     void persist({ selectedDepth: nextDepth });
   };
 
-  const handleSubjectChange = (subjectId: string | undefined) => {
+  const handleSubjectChange = useCallback((subjectId: string | undefined) => {
     if (isLoading) return;
     setSelectedSubjectId(subjectId);
     setSelectedBookId(undefined);
@@ -380,7 +383,33 @@ export default function MainScreen() {
     setExerciseContext((prev) => ({ ...prev, coursePdf: undefined }));
     void refreshAvailableBooks(subjectId);
     void persist({ selectedSubjectId: subjectId });
-  };
+  }, [isLoading, refreshAvailableBooks]);
+
+  const handleDeleteSubject = useCallback(
+    async (id: string) => {
+      try {
+        const books = await loadLibrary();
+        const isLinked = books.some((b) => b.subjectId === id);
+        if (isLinked) {
+          Alert.alert(
+            'Cannot Delete Domain',
+            'This domain has linked textbook(s) in your library. Please remove or reassign the textbook(s) before deleting this domain.'
+          );
+          return;
+        }
+        await deleteCustomSubject(id);
+        if (mounted.current) {
+          setCustomSubjects((prev) => prev.filter((s) => s.id !== id));
+          if (selectedSubjectId === id) {
+            handleSubjectChange(undefined);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to delete custom subject', e);
+      }
+    },
+    [selectedSubjectId, handleSubjectChange],
+  );
 
   const handleSelectBook = useCallback((bookId: string | undefined) => {
     setSelectedBookId(bookId);
@@ -753,6 +782,7 @@ export default function MainScreen() {
             disabled={isLoading} 
             customSubjects={customSubjects}
             onCustomSubjectAdded={(subj) => setCustomSubjects(prev => [...prev, subj])}
+            onDeleteSubject={handleDeleteSubject}
           />
           {selectedSubjectId && availableBooks.length === 0 && (
             <TouchableOpacity
