@@ -52,3 +52,19 @@ export async function saveLibrary(books: LibraryBook[]): Promise<void> {
     console.error('Failed to save library books', e);
   }
 }
+
+/**
+ * Updates a specific library book by ID with partial fields.
+ */
+export async function updateLibraryBook(id: string, updates: Partial<LibraryBook>): Promise<void> {
+  try {
+    const books = await loadLibrary();
+    const index = books.findIndex(b => b.id === id);
+    if (index !== -1) {
+      books[index] = { ...books[index], ...updates };
+      await saveLibrary(books);
+    }
+  } catch (e) {
+    console.error('Failed to update library book', e);
+  }
+}

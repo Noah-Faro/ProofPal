@@ -38,4 +38,20 @@ describe('sanitizeFeedbackMarkdown', () => {
     const output = sanitizeFeedbackMarkdown(input);
     expect(output).toBe('Bad math: $\\leq m$ and $\\neq n$');
   });
+  it('converts ALL single backticks to inline math', () => {
+    const input = 'Here is a variable `m < n` and `e`.';
+    const output = sanitizeFeedbackMarkdown(input);
+    expect(output).toBe('Here is a variable $m < n$ and $e$.');
+  });
+
+  it('aggressively strips thinking and thought tags, even if unclosed or multiline', () => {
+    const input1 = '<thinking>\nThis is a thought\n</thinking>And this is not.';
+    expect(sanitizeFeedbackMarkdown(input1)).toBe('And this is not.');
+
+    const input2 = '<thought>\nThis is another thought\n</thought>Yes.';
+    expect(sanitizeFeedbackMarkdown(input2)).toBe('Yes.');
+
+    const input3 = '<thinking>\nWait, I never closed this thought...';
+    expect(sanitizeFeedbackMarkdown(input3)).toBe('');
+  });
 });

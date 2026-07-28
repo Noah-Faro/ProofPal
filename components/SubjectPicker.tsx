@@ -9,6 +9,8 @@ import {
   SafeAreaView,
   Alert,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { getSubjectsByCategory, getSubjectById, MATH_SUBJECTS } from '../models/subjects';
 import { MathSubject, SubjectCategory } from '../models/types';
@@ -360,7 +362,10 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
         transparent={true}
         onRequestClose={() => setModalState('none')}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView 
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
           <SafeAreaView style={styles.modalContentContainer}>
             <View style={styles.modalCard}>
               <View style={styles.modalHeader}>
@@ -372,7 +377,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
                   <Text style={styles.closeButtonText}>✕</Text>
                 </TouchableOpacity>
               </View>
-              <ScrollView contentContainerStyle={styles.scrollBody}>
+              <ScrollView contentContainerStyle={styles.scrollBody} keyboardShouldPersistTaps="handled">
                 <Text style={styles.inputLabel}>Domain Name</Text>
                 <TextInput
                   style={styles.textInput}
@@ -420,7 +425,7 @@ export const SubjectPicker: React.FC<SubjectPickerProps> = ({
               </ScrollView>
             </View>
           </SafeAreaView>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

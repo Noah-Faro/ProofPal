@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, View, type ViewStyle } from 'react-native';
 import { EnrichedMarkdownText, type MarkdownStyle } from 'react-native-enriched-markdown';
-import { COLORS, FONT_SIZES, SPACING } from '../constants/theme';
+import { COLORS, FONT_SIZES, SPACING, BORDER_RADIUS } from '../constants/theme';
 
 export interface MarkdownRendererProps {
   content: string;
@@ -19,9 +19,14 @@ function sanitizeLatex(text: string): string {
 }
 
 export function sanitizeFeedbackMarkdown(content: string): string {
-  // 1. Strip thinking blocks and images
-  let cleaned = content.replace(/<thinking>[\s\S]*?<\/thinking>/g, '');
+  // 1. Strip thinking blocks and images (including unclosed blocks)
+  let cleaned = content.replace(/<(?:thinking|thought)>[\s\S]*?(?:<\/(?:thinking|thought)>|$)/gi, '');
   cleaned = cleaned.replace(/!\[[^\]]*\]\([^\s)]+(?:\s+[^)]*)?\)/g, '[Image omitted]');
+
+  // 1.5. Convert ALL inline backticks to LaTeX math (Scribe does not write programming code)
+  cleaned = cleaned.replace(/`([^`\n]+)`/g, (match, inner) => {
+    return `$${inner}$`;
+  });
 
   // 2. Extract math blocks into placeholders to protect them
   const mathBlocks: string[] = [];
@@ -73,7 +78,7 @@ const markdownStyle: MarkdownStyle = {
   list: { color: COLORS.textPrimary, bulletColor: COLORS.textPrimary, markerColor: COLORS.textPrimary },
   code: { color: COLORS.accent, backgroundColor: COLORS.bgSurface },
   codeBlock: { color: COLORS.textPrimary, backgroundColor: COLORS.bgSurface, padding: SPACING.sm },
-  blockquote: { color: COLORS.textPrimary, borderColor: COLORS.primary, borderWidth: 1 },
+  blockquote: { color: COLORS.textPrimary, backgroundColor: COLORS.bgSurface, borderColor: COLORS.primary, borderWidth: 1, padding: SPACING.sm, borderRadius: BORDER_RADIUS.sm, overflow: 'hidden' },
   link: { color: COLORS.primaryLight },
   math: { color: COLORS.textPrimary, backgroundColor: COLORS.bgSurface, padding: SPACING.sm },
   inlineMath: { color: COLORS.textPrimary },

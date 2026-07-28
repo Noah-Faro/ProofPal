@@ -15,6 +15,9 @@ export interface LocalAttachment {
   name: string;
   mimeType: string;
   size?: number;
+  bookId?: string;
+  remoteName?: string;
+  remoteTimestamp?: number;
 }
 
 export interface PreparedImage {
@@ -71,6 +74,7 @@ export type AppErrorCode =
   | 'RATE_LIMIT'
   | 'NETWORK'
   | 'INVALID_RESPONSE'
+  | 'FILE_EXPIRED'
   | 'API';
 
 export interface AppError {

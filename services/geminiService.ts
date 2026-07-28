@@ -28,8 +28,7 @@ const MAX_COMBINED_INLINE_IMAGE_BYTES = 13 * 1024 * 1024;
 const UPLOAD_TIMEOUT_MS = 60_000;
 const GENERATION_TIMEOUT_MS = 90_000;
 const PDF_PROCESSING_TIMEOUT_MS = 120_000;
-const PDF_POLL_INTERVAL_MS = 8_000;
-const PDF_POLL_RETRY_DELAYS_MS = [5_000, 10_000] as const;
+const PDF_POLL_INTERVAL_MS = 4_000;
 
 const PROOF_RESULT_SCHEMA = {
   type: 'OBJECT',
@@ -108,19 +107,29 @@ export async function checkProof(request: ProofCheckRequest): Promise<ProofCheck
     let remotePdfName: string | undefined;
     if (request.exerciseContext?.coursePdf) {
       request.onStageChange?.('uploading-pdf');
-      const uploadedPdf = await uploadAndProcessPdf(
-        ai,
-        request.exerciseContext.coursePdf,
-        request.signal,
-        (name) => {
-          remotePdfName = name;
-        },
-        () => request.onStageChange?.('processing-pdf'),
-      );
-      if (!uploadedPdf.uri || !uploadedPdf.mimeType) {
-        throw new ProofPalError('PDF_PROCESSING_FAILED', 'The uploaded PDF could not be used.', true, 'retry');
+      const pdf = request.exerciseContext.coursePdf;
+      
+      const EXPIRATION_THRESHOLD_MS = 47 * 60 * 60 * 1000;
+      const isCachedAndValid = pdf.remoteName && pdf.remoteTimestamp && (Date.now() - pdf.remoteTimestamp < EXPIRATION_THRESHOLD_MS);
+
+      if (isCachedAndValid) {
+        remotePdfName = pdf.remoteName;
+        parts.push(createPartFromUri(`https://generativelanguage.googleapis.com/v1beta/files/${pdf.remoteName}`, 'application/pdf'));
+      } else {
+        const uploadedPdf = await uploadAndProcessPdf(
+          ai,
+          pdf,
+          request.signal,
+          (name) => {
+            remotePdfName = name;
+          },
+          () => request.onStageChange?.('processing-pdf'),
+        );
+        if (!uploadedPdf.uri || !uploadedPdf.mimeType) {
+          throw new ProofPalError('PDF_PROCESSING_FAILED', 'The uploaded PDF could not be used.', true, 'retry');
+        }
+        parts.push(createPartFromUri(uploadedPdf.uri, uploadedPdf.mimeType));
       }
-      parts.push(createPartFromUri(uploadedPdf.uri, uploadedPdf.mimeType));
     }
 
     request.onStageChange?.('evaluating');
@@ -214,31 +223,22 @@ async function pollUntilPdfActive(
     }
 
     await sleep(PDF_POLL_INTERVAL_MS, signal);
-    currentFile = await getFileWithRetry(ai, uploadedFile.name!, signal);
-  }
-}
-
-async function getFileWithRetry(ai: GoogleGenAI, name: string, signal?: AbortSignal): Promise<GeminiFile> {
-  let lastError: unknown;
-  for (let attempt = 0; attempt <= PDF_POLL_RETRY_DELAYS_MS.length; attempt += 1) {
-    assertNotAborted(signal);
+    
     try {
-      return await ai.files.get({
-        name,
+      currentFile = await ai.files.get({
+        name: uploadedFile.name!,
         config: {
           abortSignal: signal,
           httpOptions: { timeout: 15_000 },
         },
       });
     } catch (error) {
-      lastError = error;
-      if (attempt === PDF_POLL_RETRY_DELAYS_MS.length || isAbortError(error)) {
-        break;
-      }
-      await sleep(PDF_POLL_RETRY_DELAYS_MS[attempt], signal);
+      if (isAbortError(error)) throw error;
+      // If we get a 404, 503, or network error during polling, just ignore it and let the loop retry
+      // until the overall PDF_PROCESSING_TIMEOUT_MS deadline is reached.
+      console.warn('Transient error while polling PDF state, retrying...', error);
     }
   }
-  throw toProofPalError(lastError, 'Could not check whether the course PDF finished processing.');
 }
 
 
@@ -294,7 +294,7 @@ function parseProofResult(responseText: string | undefined, request: ProofCheckR
       model: request.model,
       depth: request.depth,
       timestamp: Date.now(),
-      ...(remotePdfName ? { remotePdfName } : {}),
+      remotePdfName,
     };
   } catch {
     throw new ProofPalError('INVALID_RESPONSE', 'Gemini returned an invalid proof evaluation. Please retry.', true, 'retry');
@@ -379,8 +379,12 @@ function toProofPalError(error: unknown, fallbackMessage = 'Scribe could not eva
   if (message.includes('401') || message.includes('403') || message.includes('api key')) {
     return new ProofPalError('MISSING_API_KEY', 'Your Gemini API key was rejected. Add a valid key and retry.', false, 'add-api-key');
   }
-  if (message.includes('404') || message.includes('model')) {
-    return new ProofPalError('MODEL_UNAVAILABLE', 'The selected Gemini model is unavailable. Choose another model.', false, 'open-settings');
+  if (message.includes('404')) {
+    if (message.includes('models/') || message.includes('model ')) {
+      return new ProofPalError('MODEL_UNAVAILABLE', 'The selected Gemini model is unavailable. Choose another model.', false, 'open-settings');
+    }
+    // If it's a 404 for a file, it means it's not found (yet) or deleted.
+    return new ProofPalError('FILE_EXPIRED', 'Scribe could not find the file or it hasn\'t synced yet. Please try again.', true, 'retry');
   }
   if (message.includes('network') || message.includes('fetch') || message.includes('connection')) {
     return new ProofPalError('NETWORK', 'No internet connection. Check your network and try again.', true, 'retry');
@@ -392,7 +396,7 @@ export async function sendFollowUpMessage(
   message: string,
   currentFeedback: string,
   previousChat: { role: 'user' | 'model'; text: string }[],
-  config: { model: GeminiModel; depth: PedagogicalDepth },
+  config: { model: GeminiModel; depth: PedagogicalDepth; originalProofImage?: string },
   imageUri?: string,
   remotePdfName?: string
 ): Promise<string> {
@@ -441,6 +445,12 @@ Pedagogical Depth: ${config.depth}${remotePdfName ? `\nReferenced Textbook File:
     if (imageUri) {
       const prepared = await prepareImageForApi(imageUri);
       userParts.push({ inlineData: { data: prepared.data, mimeType: prepared.mimeType } });
+    }
+
+    // Include the ORIGINAL proof image in the first history message if it exists
+    if (history.length > 0 && history[0].role === 'user' && config.originalProofImage) {
+      const preparedOriginal = await prepareImageForApi(config.originalProofImage);
+      history[0].parts.unshift({ inlineData: { data: preparedOriginal.data, mimeType: preparedOriginal.mimeType } });
     }
 
     const chat = ai.chats.create({

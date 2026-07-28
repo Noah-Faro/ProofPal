@@ -237,6 +237,9 @@ export const ExerciseContextPanel: React.FC<ExerciseContextProps> = ({
                                 name: book.name,
                                 mimeType: 'application/pdf',
                                 size: book.size,
+                                bookId: book.id,
+                                remoteName: book.remotePdfName,
+                                remoteTimestamp: book.remotePdfTimestamp,
                               },
                             });
                           }

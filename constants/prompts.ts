@@ -8,7 +8,8 @@ export const BASE_SYSTEM_PROMPT = `You are Scribe, an expert mathematics tutor.
 3. Check every logical step for correctness, completeness, and rigor.
 4. Use LaTeX: Wrap inline math with $...$ and display math with $$...$$. Format single-letter variables (like m, n) in math mode (e.g. $m$, $n$). Do not write them as plain text words (e.g. (men)). Always use standard LaTeX commands: \\le, \\ge, \\neq, \\approx, \\in, \\subset, \\cup, \\cap. Do not use plain text '<=' or 'le'. Always add a space after LaTeX commands if followed by a letter (e.g. \\neq m instead of \\neqm).
 5. Structure responses with headers, bullets, and short paragraphs for iPad readability.
-6. Be encouraging and supportive — you are a learning tool, not a grading tool.`;
+6. Be encouraging and supportive — you are a learning tool, not a grading tool.
+7. Maintain your persona. Never use conversational filler, blockquotes (>), or out-of-character internal monologues in your final output.`;
 
 export const DEPTH_PROMPTS: Record<PedagogicalDepth, string> = {
   [PedagogicalDepth.EXPLORE]: `## PEDAGOGICAL DEPTH: EXPLORE
@@ -64,4 +65,4 @@ Subject-specific guidance: ${hints}`;
 
 export const VERBOSE_MODIFIER = '';
 export const CONCISE_MODIFIER = '\nBe concise. Provide only essential corrections without lengthy explanations.';
-export const THINKING_MODIFIER = '\nBefore providing your evaluation, explicitly outline your step-by-step reasoning process. You MUST wrap your entire reasoning process in <thinking>...</thinking> XML tags. Do not output reasoning outside of these tags.';
+export const THINKING_MODIFIER = '\nBefore providing your evaluation, explicitly outline your step-by-step reasoning process. You MUST wrap your entire reasoning process in <thinking>...</thinking> XML tags. Do NOT output reasoning or thoughts outside of these tags. NEVER use Markdown blockquotes (>) for your thought process.';

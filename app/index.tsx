@@ -15,11 +15,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Modal,
+  Keyboard,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import { Redirect, useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DropZone } from '../components/DropZone';
 import { DepthPicker } from '../components/DepthPicker';
 import { SubjectPicker } from '../components/SubjectPicker';
@@ -32,11 +33,11 @@ import { DEFAULT_APP_SETTINGS, loadAppSettings, updateAppSettings, saveHistoryEn
 import { GeminiModel, type AppSettings, type HistoryEntry, PedagogicalDepth } from '../models/types';
 import type { AppError, LocalAttachment, ProofCheckResult, ProofCheckStage, ProofExerciseContext, ProofVerdict } from '../types/proof';
 import { ProofPalError } from '../types/proof';
-import { getSubjectById } from '../models/subjects';
+import { getSubjectById, loadCustomSubjects } from '../models/subjects';
 import { getModelInfo } from '../models/geminiModels';
 import { getDepthInfo } from '../models/depthLevels';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
-import { loadLibrary, LibraryBook } from '../utilities/libraryStorage';
+import { loadLibrary, updateLibraryBook, LibraryBook } from '../utilities/libraryStorage';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -125,6 +126,9 @@ export default function MainScreen() {
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
   const [chatImageUri, setChatImageUri] = useState<string | null>(null);
+  const [fullScreenImageUri, setFullScreenImageUri] = useState<string | null>(null);
+  const [keyboardSpacerHeight, setKeyboardSpacerHeight] = useState(0);
+  const [customSubjects, setCustomSubjects] = useState<MathSubject[]>([]);
 
   const [proofExecutionDetails, setProofExecutionDetails] = useState<{
     model: GeminiModel;
@@ -328,10 +332,17 @@ export default function MainScreen() {
 
   useFocusEffect(useCallback(() => {
     void loadSettings();
+    void loadCustomSubjects().then(setCustomSubjects);
     if (selectedSubjectId) {
       void refreshAvailableBooks(selectedSubjectId);
     }
   }, [loadSettings, refreshAvailableBooks, selectedSubjectId]));
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', (e) => setKeyboardSpacerHeight(e.endCoordinates.height));
+    const hideSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKeyboardSpacerHeight(0));
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
 
   useEffect(() => {
     mounted.current = true;
@@ -372,6 +383,7 @@ export default function MainScreen() {
 
   const handleSubjectChange = (subjectId: string | undefined) => {
     if (isLoading) return;
+    void loadCustomSubjects().then(setCustomSubjects);
     setSelectedSubjectId(subjectId);
     setSelectedBookId(undefined);
     // A previous subject's PDF must never be submitted under a new subject
@@ -482,7 +494,7 @@ export default function MainScreen() {
     const currentRequest = ++requestId.current;
     const controller = new AbortController();
     controllerRef.current = controller;
-    const subject = selectedSubjectId ? getSubjectById(selectedSubjectId) : undefined;
+    const subject = selectedSubjectId ? (getSubjectById(selectedSubjectId) || customSubjects.find(s => s.id === selectedSubjectId)) : undefined;
 
     const snapshot = {
       proofImage,
@@ -518,6 +530,12 @@ export default function MainScreen() {
         },
       });
       if (mounted.current && requestId.current === currentRequest) {
+        if (checkResult.remotePdfName && snapshot.exerciseContext.coursePdf?.bookId) {
+          void updateLibraryBook(snapshot.exerciseContext.coursePdf.bookId, {
+            remotePdfName: checkResult.remotePdfName,
+            remotePdfTimestamp: checkResult.timestamp,
+          });
+        }
         setResult(checkResult);
         openSheet();
         // Save to history
@@ -540,6 +558,24 @@ export default function MainScreen() {
     } catch (caught) {
       const nextError = toAppError(caught);
       if (controller.signal.aborted || nextError.code === 'CANCELLED') return;
+      
+      if (nextError.code === 'FILE_EXPIRED' && snapshot.exerciseContext.coursePdf?.bookId) {
+        // Wipe local cache
+        void updateLibraryBook(snapshot.exerciseContext.coursePdf.bookId, {
+          remotePdfName: undefined,
+          remotePdfTimestamp: undefined,
+        });
+        setExerciseContext((prev) => ({
+          ...prev,
+          coursePdf: prev.coursePdf ? { ...prev.coursePdf, remoteName: undefined, remoteTimestamp: undefined } : undefined,
+        }));
+        // Notify the user but leave them in a state to easily click Check Proof again
+        if (mounted.current && requestId.current === currentRequest) {
+          setError({ ...nextError, message: 'The cached course PDF expired on Google\'s servers. Please press Check Proof again to re-upload it.' });
+        }
+        return;
+      }
+
       if (mounted.current && requestId.current === currentRequest) setError(nextError);
     } finally {
       if (mounted.current && requestId.current === currentRequest) {
@@ -557,7 +593,8 @@ export default function MainScreen() {
 
   const activeModel = proofExecutionDetails?.model ?? result?.model ?? selectedModel;
   const activeDepth = proofExecutionDetails?.depth ?? result?.depth ?? depth;
-  const activeSubjectName = proofExecutionDetails?.subjectName;
+  const resolvedSubject = selectedSubjectId ? (getSubjectById(selectedSubjectId) || customSubjects.find(s => s.id === selectedSubjectId)) : undefined;
+  const activeSubjectName = proofExecutionDetails?.subjectName ?? resolvedSubject?.name;
   const modelInfo = getModelInfo(activeModel);
   const depthInfo = getDepthInfo(activeDepth);
 
@@ -608,7 +645,9 @@ export default function MainScreen() {
               {msg.role === 'user' ? (
                 <View style={styles.userBubble}>
                   {msg.imageUri && (
-                    <Image source={{ uri: msg.imageUri }} style={styles.userMessageImage} resizeMode="cover" />
+                    <TouchableOpacity onPress={() => setFullScreenImageUri(msg.imageUri)}>
+                      <Image source={{ uri: msg.imageUri }} style={styles.userMessageImage} resizeMode="cover" />
+                    </TouchableOpacity>
                   )}
                   {!!msg.text && (
                     <Text style={styles.userBubbleText}>{msg.text}</Text>
@@ -765,35 +804,38 @@ export default function MainScreen() {
         </View>
 
         {/* Action Buttons Row */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.checkButton, (!proofImage || isLoading) && styles.checkButtonDisabled]}
-            onPress={() => void handleCheckProof()}
-            disabled={!proofImage || isLoading}
-            accessibilityRole="button"
-            accessibilityLabel="Check proof"
-          >
-            {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.checkButtonText}>Check Proof</Text>}
-          </TouchableOpacity>
-
-          {(proofImage || exerciseContext.reference || exerciseContext.sourceText || exerciseContext.sourceImage || exerciseContext.coursePdf) && (
+        {!keyboardSpacerHeight && (
+          <View style={styles.actionRow}>
             <TouchableOpacity
-              style={styles.resetButton}
-              onPress={handleReset}
-              disabled={isLoading}
+              style={[styles.checkButton, (!proofImage || isLoading) && styles.checkButtonDisabled]}
+              onPress={() => void handleCheckProof()}
+              disabled={!proofImage || isLoading}
               accessibilityRole="button"
-              accessibilityLabel="Reset all"
+              accessibilityLabel="Check proof"
             >
-              <Text style={styles.resetButtonText}>✕</Text>
+              {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.checkButtonText}>Check Proof</Text>}
             </TouchableOpacity>
-          )}
-        </View>
+
+            {(proofImage || exerciseContext.reference || exerciseContext.sourceText || exerciseContext.sourceImage || exerciseContext.coursePdf) && (
+              <TouchableOpacity
+                style={styles.resetButton}
+                onPress={handleReset}
+                disabled={isLoading}
+                accessibilityRole="button"
+                accessibilityLabel="Reset all"
+              >
+                <Text style={styles.resetButtonText}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
         {isLoading && (
           <TouchableOpacity style={styles.cancelButton} onPress={handleCancel} accessibilityRole="button" accessibilityLabel="Cancel proof check">
             <Text style={styles.cancelButtonText}>Cancel</Text>
           </TouchableOpacity>
         )}
+        <View style={{ height: keyboardSpacerHeight ? keyboardSpacerHeight : 0 }} />
       </ScrollView>
       </KeyboardAvoidingView>
 
@@ -819,13 +861,7 @@ export default function MainScreen() {
                   <Text style={styles.sheetTitle}>Feedback</Text>
                 </View>
                 <TouchableOpacity
-                  onPress={() => {
-                    if (lastSheetY.current === snapPeek) {
-                      fullyCloseSheet();
-                    } else {
-                      closeSheet();
-                    }
-                  }}
+                  onPress={() => fullyCloseSheet()}
                   style={styles.sheetCloseButton}
                   accessibilityRole="button"
                   accessibilityLabel="Minimize feedback"
@@ -872,6 +908,18 @@ export default function MainScreen() {
           void handleCheckProof(model as GeminiModel);
         }}
       />
+
+      {/* Fullscreen Image Modal */}
+      <Modal visible={!!fullScreenImageUri} transparent={true} animationType="fade" onRequestClose={() => setFullScreenImageUri(null)}>
+        <TouchableOpacity style={styles.fullScreenImageOverlay} activeOpacity={1} onPress={() => setFullScreenImageUri(null)}>
+          {fullScreenImageUri && (
+            <Image source={{ uri: fullScreenImageUri }} style={styles.fullScreenImage} resizeMode="contain" />
+          )}
+          <TouchableOpacity style={styles.fullScreenCloseButton} onPress={() => setFullScreenImageUri(null)}>
+            <Text style={styles.fullScreenCloseText}>✕</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -946,4 +994,8 @@ const styles = StyleSheet.create({
   emptySubtitle: { fontSize: FONT_SIZES.sm, color: COLORS.textMuted, textAlign: 'center', maxWidth: 360 },
   addBookLink: { marginTop: SPACING.sm, marginLeft: SPACING.xs, alignSelf: 'flex-start' },
   addBookLinkText: { color: COLORS.primaryLight, fontSize: FONT_SIZES.sm, fontWeight: '500' },
+  fullScreenImageOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.9)', justifyContent: 'center', alignItems: 'center' },
+  fullScreenImage: { width: '100%', height: '100%' },
+  fullScreenCloseButton: { position: 'absolute', top: 50, right: 20, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255, 255, 255, 0.2)', justifyContent: 'center', alignItems: 'center' },
+  fullScreenCloseText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
 });
