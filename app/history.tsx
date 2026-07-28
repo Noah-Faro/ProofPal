@@ -4,13 +4,11 @@ import { useRouter } from 'expo-router';
 
 import { loadHistory, clearHistory, deleteHistoryEntry } from '../utilities/settings';
 import { HistoryEntry } from '../models/types';
-import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
 
 export default function HistoryScreen() {
   const router = useRouter();
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     loadHistory().then(setHistory).catch(console.error);

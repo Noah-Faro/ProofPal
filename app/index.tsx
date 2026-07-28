@@ -158,6 +158,7 @@ export default function MainScreen() {
       const loadedDepth = (params.depth as PedagogicalDepth) || PedagogicalDepth.GUIDE;
       const loadedTimestamp = params.timestamp ? parseInt(params.timestamp, 10) : Date.now();
 
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResult({
         verdict: loadedVerdict,
         feedbackMarkdown: params.feedbackMarkdown,
@@ -204,7 +205,7 @@ export default function MainScreen() {
     });
   }, [sheetAnim, snapClosed]);
 
-  /* eslint-disable react-hooks/exhaustive-deps, react-hooks/refs */
+  /* eslint-disable react-hooks/refs */
   const panResponder = useMemo(
     () =>
       PanResponder.create({
@@ -247,7 +248,7 @@ export default function MainScreen() {
       }),
     [sheetAnim, snapExpanded, snapHalf, snapPeek, snapClosed, fullyCloseSheet],
   );
-  /* eslint-enable react-hooks/exhaustive-deps, react-hooks/refs */
+  /* eslint-enable react-hooks/refs */
 
   const [availableBooks, setAvailableBooks] = useState<{ id: string; name: string; uri: string; subjectId?: string }[]>([]);
   const [selectedBooksMap, setSelectedBooksMap] = useState<Record<string, string>>({});
@@ -292,7 +293,7 @@ export default function MainScreen() {
     };
     void fetchBooks();
     return () => { isActive = false; };
-  }, [selectedSubjectId]);
+  }, [selectedSubjectId, selectedBooksMap]);
 
   const loadSettings = useCallback(async () => {
     try {
