@@ -54,4 +54,18 @@ describe('sanitizeFeedbackMarkdown', () => {
     const input3 = '<thinking>\nWait, I never closed this thought...';
     expect(sanitizeFeedbackMarkdown(input3)).toBe('');
   });
+
+  it('repairs missing backslashes on standard commands and fixes eq inside math blocks ONLY', () => {
+    const inputMath = 'Math: $m neq n$ and $a leq b$ and $x eq y$';
+    expect(sanitizeFeedbackMarkdown(inputMath)).toBe('Math: $m \\neq n$ and $a \\leq b$ and $x = y$');
+
+    const inputProse = 'Prose containing neq or eq or leq outside of math blocks remains untouched';
+    expect(sanitizeFeedbackMarkdown(inputProse)).toBe('Prose containing neq or eq or leq outside of math blocks remains untouched');
+  });
+
+  it('replaces ||...|| and ... only inside math blocks', () => {
+    const input = 'Outside ||norm|| and ... vs inside: $||v||$ and $a ... b$';
+    expect(sanitizeFeedbackMarkdown(input)).toBe('Outside ||norm|| and ... vs inside: $\\lVert v \\rVert$ and $a \\dots b$');
+  });
 });
+

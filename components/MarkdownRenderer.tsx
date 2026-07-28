@@ -62,14 +62,18 @@ export function sanitizeFeedbackMarkdown(content: string): string {
     }
     
     // Convert ||...|| to \lVert ... \rVert
-    block = block.replace(/\|\|([\s\S]*?)\|\|/g, '\\\\lVert $1 \\\\rVert');
+    block = block.replace(/\|\|([\s\S]*?)\|\|/g, (_, inner) => `\\lVert ${inner} \\rVert`);
     
     // Convert ... to \dots
-    block = block.replace(/\.\.\./g, '\\\\dots');
+    block = block.replace(/\.\.\./g, '\\dots');
     
+    // Fix missing backslashes on standard commands inside math blocks
+    block = block.replace(/(?<!\\)\b(leq|le|geq|ge|neq|ne|approx)\b/g, (_, cmd) => `\\${cmd}`);
+    block = block.replace(/(?<!\\)\beq\b/g, '=');
+
     // Fix squashed commands inside math blocks, e.g., \leqm -> \leq m
     block = block.replace(/\\(leq|le|geq|ge|neq|ne|approx|in|subset|cup|cap|to|rightarrow)([a-zA-Z]+)/g, (match, cmd, letters) => {
-      if (['left', 'right', 'inf', 'int', 'sub', 'sup', 'text', 'begin', 'end'].includes(cmd + letters)) return match;
+      if (['left', 'right', 'inf', 'int', 'sub', 'sup', 'text', 'begin', 'end', 'neq', 'leq', 'geq', 'approx', 'in', 'to', 'cup', 'cap', 'subset'].includes(cmd + letters)) return match;
       return '\\' + cmd + ' ' + letters;
     });
     
