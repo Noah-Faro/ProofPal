@@ -84,7 +84,7 @@ export default function HistoryScreen() {
               <Text style={styles.badgeText}>{item.verdict ? item.verdict.toUpperCase() : 'REVIEWED'}</Text>
             </View>
             <TouchableOpacity 
-              onPress={() => setDebugContent(item.feedbackMarkdown)} 
+              onPress={() => setDebugContent(item.feedbackMarkdown || 'No content')} 
               style={styles.actionIcon}
             >
               <Text style={{fontSize: 18}}>🐞</Text>
@@ -137,7 +137,7 @@ export default function HistoryScreen() {
         />
       )}
       <DebugModal 
-        visible={debugContent !== null} 
+        visible={!!debugContent} 
         content={debugContent} 
         onClose={() => setDebugContent(null)} 
       />

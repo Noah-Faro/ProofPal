@@ -986,7 +986,7 @@ export default function MainScreen() {
         </TouchableOpacity>
       </Modal>
       <DebugModal 
-        visible={debugContent !== null} 
+        visible={!!debugContent} 
         content={debugContent} 
         onClose={() => setDebugContent(null)} 
       />
