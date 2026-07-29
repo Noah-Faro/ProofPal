@@ -1,6 +1,7 @@
 import { GeminiModel, PedagogicalDepth } from '../../models/types';
 import { ProofPalError } from '../../types/proof';
 import { checkProof, sendFollowUpMessage } from '../geminiService';
+import { MATH_MARKDOWN_CONTRACT } from '../../constants/prompts';
 
 const mockGenerateContent = jest.fn();
 const mockUpload = jest.fn();
@@ -239,24 +240,32 @@ describe('sendFollowUpMessage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetApiKey.mockResolvedValue('test-key');
-    mockSendMessage.mockResolvedValue({ text: 'Follow-up answer' });
+    mockSendMessage.mockResolvedValue({
+      text: JSON.stringify({ messageMarkdown: 'Follow-up answer', verdict: 'correct' }),
+    });
   });
 
-  it('uses startChat and passes remotePdfName inline reference when provided', async () => {
+  it('uses startChat with responseSchema and passes remotePdfName inline reference when provided', async () => {
     const response = await sendFollowUpMessage(
-      'Why is step 2 wrong?',
-      'Step 2 contains an algebraic error.',
-      [{ role: 'user', text: 'Check proof' }, { role: 'model', text: 'Step 2 contains an algebraic error.' }],
-      { model: GeminiModel.FLASH_36, depth: PedagogicalDepth.GUIDE },
-      undefined,
-      'files/textbook123'
+      {
+        depth: PedagogicalDepth.GUIDE,
+        currentFeedbackMarkdown: 'Step 2 contains an algebraic error.',
+        conversation: [
+          { role: 'user', text: 'Check proof' },
+          { role: 'model', text: 'Step 2 contains an algebraic error.' },
+          { role: 'user', text: 'Why is step 2 wrong?' },
+        ],
+        remotePdfName: 'files/textbook123',
+      },
+      GeminiModel.FLASH_36,
     );
 
-    expect(response).toBe('Follow-up answer');
+    expect(response).toEqual({ messageMarkdown: 'Follow-up answer', verdict: 'correct' });
     expect(mockChatsCreate).toHaveBeenCalledWith(expect.objectContaining({
       model: GeminiModel.FLASH_36,
       config: expect.objectContaining({
-        systemInstruction: expect.stringContaining('Referenced Textbook File: files/textbook123'),
+        responseMimeType: 'application/json',
+        systemInstruction: expect.stringMatching(new RegExp(`(?=.*${escapeRegExp('Referenced Textbook File: files/textbook123')})(?=.*${escapeRegExp(MATH_MARKDOWN_CONTRACT.trim())})(?=.*${escapeRegExp('FOLLOW-UP GUARDRAILS')})`, 's')),
       }),
       history: expect.arrayContaining([
         expect.objectContaining({
@@ -272,3 +281,7 @@ describe('sendFollowUpMessage', () => {
     expect(mockSendMessage).toHaveBeenCalledWith({ message: [{ text: 'Why is step 2 wrong?' }] });
   });
 });
+
+function escapeRegExp(string: string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}

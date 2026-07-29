@@ -64,6 +64,17 @@ export interface ProofCheckResult {
   remoteScopeId?: string;
 }
 
+export type FollowUpContext = {
+  depth: PedagogicalDepth;
+  subject?: MathSubject;
+  proofImage?: string; // base64 inline data
+  remotePdfName?: string;
+  currentFeedbackMarkdown: string;
+  conversation: { role: 'user' | 'model'; text: string }[];
+  concise?: boolean;
+  thinking?: boolean;
+};
+
 export type AppErrorCode =
   | 'MISSING_API_KEY'
   | 'UNSUPPORTED_FILE'

@@ -2,44 +2,34 @@ import React, { useMemo } from 'react';
 import { StyleSheet, View, type ViewStyle } from 'react-native';
 import { EnrichedMarkdownText, type MarkdownStyle } from 'react-native-enriched-markdown';
 import { COLORS, FONT_SIZES, SPACING, BORDER_RADIUS } from '../constants/theme';
+import { validateFeedbackMarkdown } from '../utilities/markdownValidation';
 
 export interface MarkdownRendererProps {
   content: string;
   style?: ViewStyle;
 }
 
-function sanitizeLatex(text: string): string {
-  return text
-    .replace(/(?<![$])(?:<=|≤)/g, '$\\le$')
-    .replace(/(?<![$])(?:>=|≥)/g, '$\\ge$')
-    .replace(/(?<![$])(?:!=|≠)/g, '$\\neq$')
-    .replace(/(?<![$])(?:->|→)/g, '$\\rightarrow$')
-    .replace(/(?<![$])(?:=>|⇒)/g, '$\\Rightarrow$')
-    .replace(/(?<![$])(?:~|≈)/g, '$\\approx$');
-}
-
-export function sanitizeFeedbackMarkdown(content: string): string {
+export function normalizeFeedbackMarkdown(content: string): string {
   // 1. Strip thinking blocks and images (including unclosed blocks)
   let cleaned = content.replace(/<(?:thinking|thought)>[\s\S]*?(?:<\/(?:thinking|thought)>|$)/gi, '');
   cleaned = cleaned.replace(/!\[[^\]]*\]\([^\s)]+(?:\s+[^)]*)?\)/g, '[Image omitted]');
 
-  // 1.5. Convert ALL inline backticks to LaTeX math (Scribe does not write programming code)
+  // 1.5. Convert ALL inline backticks to LaTeX math
   cleaned = cleaned.replace(/`([^`\n]+)`/g, (match, inner) => {
     return `$${inner}$`;
   });
 
-  // 2. Extract math blocks into placeholders to protect them
+  // 2. Wrap Unwrapped Equations: lines containing = and either ^, _, or \ but lacking $
+  cleaned = cleaned.split('\n').map(line => {
+    if (line.includes('=') && (line.includes('^') || line.includes('_') || line.includes('\\')) && !line.includes('$')) {
+      return `$$${line}$$`;
+    }
+    return line;
+  }).join('\n');
+
+  // 3. Extract math blocks into placeholders to protect them
   const mathBlocks: string[] = [];
   let placeholderText = cleaned.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|\\\[[\s\S]*?\\\]|\\\((?:[^\\\n]|\\(?!\)))*?\\\))/g, (match) => {
-    mathBlocks.push(match);
-    return `___MATH_BLOCK_${mathBlocks.length - 1}___`;
-  });
-
-  // 3. Convert bare operators in text
-  placeholderText = sanitizeLatex(placeholderText);
-
-  // Protect any math blocks created by sanitizeLatex
-  placeholderText = placeholderText.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|\\\[[\s\S]*?\\\]|\\\((?:[^\\\n]|\\(?!\)))*?\\\))/g, (match) => {
     mathBlocks.push(match);
     return `___MATH_BLOCK_${mathBlocks.length - 1}___`;
   });
@@ -67,18 +57,22 @@ export function sanitizeFeedbackMarkdown(content: string): string {
     // Convert ... to \dots
     block = block.replace(/\.\.\./g, '\\dots');
     
-    // Fix missing backslashes on standard commands inside math blocks
-    block = block.replace(/(?<!\\)\b(leq|le|geq|ge|neq|ne|approx)\b/g, (_, cmd) => `\\${cmd}`);
+    // Replace \beq with =
     block = block.replace(/(?<!\\)\beq\b/g, '=');
 
-    // Fix squashed commands inside math blocks, e.g., \leqm -> \leq m
-    block = block.replace(/\\(leq|le|geq|ge|neq|ne|approx|in|subset|cup|cap|to|rightarrow)([a-zA-Z]+)/g, (match, cmd, letters) => {
-      if (['left', 'right', 'inf', 'int', 'sub', 'sup', 'text', 'begin', 'end', 'neq', 'leq', 'geq', 'approx', 'in', 'to', 'cup', 'cap', 'subset'].includes(cmd + letters)) return match;
-      return '\\' + cmd + ' ' + letters;
-    });
+    // Fix missing backslashes on standard commands inside math blocks
+    block = block.replace(/(?<!\\)\b(leq|geq|neq|approx|alpha|beta|theta|cdot|dots|int|sum|frac|lim|subset|in|cup|cap|to|rightarrow)\b/g, (_, cmd) => `\\${cmd}`);
     
     return block;
   });
+}
+
+export function prepareFeedbackMarkdown(markdown: string): string {
+  const validation = validateFeedbackMarkdown(markdown);
+  if (!validation.ok) {
+    return markdown.replace(/\$/g, '\\$').replace(/\\\[/g, '\\\\[').replace(/\\\(/g, '\\\\(');
+  }
+  return normalizeFeedbackMarkdown(markdown);
 }
 
 const markdownStyle: MarkdownStyle = {
@@ -98,7 +92,7 @@ const markdownStyle: MarkdownStyle = {
 };
 
 export function MarkdownRenderer({ content, style }: MarkdownRendererProps) {
-  const safeMarkdown = useMemo(() => sanitizeFeedbackMarkdown(content), [content]);
+  const safeMarkdown = useMemo(() => prepareFeedbackMarkdown(content), [content]);
   return (
     <View style={[styles.container, style]}>
       <EnrichedMarkdownText

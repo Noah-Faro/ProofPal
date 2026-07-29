@@ -31,7 +31,7 @@ import { checkProof, sendFollowUpMessage } from '../services/geminiService';
 import { prepareImageForApi } from '../utilities/imageHelper';
 import { DEFAULT_APP_SETTINGS, loadAppSettings, updateAppSettings, saveHistoryEntry, updateHistoryEntry, loadCustomSubjects, deleteCustomSubject } from '../utilities/settings';
 import { GeminiModel, type AppSettings, type HistoryEntry, PedagogicalDepth, MathSubject } from '../models/types';
-import type { AppError, LocalAttachment, ProofCheckResult, ProofCheckStage, ProofExerciseContext, ProofVerdict } from '../types/proof';
+import type { AppError, FollowUpContext, LocalAttachment, ProofCheckResult, ProofCheckStage, ProofExerciseContext, ProofVerdict } from '../types/proof';
 import { ProofPalError } from '../types/proof';
 import { getSubjectById } from '../models/subjects';
 import { getModelInfo } from '../models/geminiModels';
@@ -485,21 +485,45 @@ export default function MainScreen() {
     setChatLoading(true);
     setChatImageUri(null);
     
+    const activeModel = proofExecutionDetails?.model ?? result.model ?? selectedModel;
+    const activeDepth = proofExecutionDetails?.depth ?? result.depth ?? depth;
+    const resolvedSubject = selectedSubjectId
+      ? (getSubjectById(selectedSubjectId) || customSubjects.find((s) => s.id === selectedSubjectId))
+      : undefined;
+
+    const followUpContext: FollowUpContext = {
+      depth: activeDepth,
+      subject: resolvedSubject,
+      proofImage: proofImage?.uri,
+      remotePdfName: result.remotePdfName,
+      currentFeedbackMarkdown: result.feedbackMarkdown,
+      conversation: updatedUserHistory.map(({ role, text }) => ({ role, text })),
+      concise: conciseMode,
+      thinking: thinkingMode,
+    };
+
     try {
-      const responseText = await sendFollowUpMessage(
-        text, 
-        result.feedbackMarkdown, 
-        chatHistory.map(({ role, text }) => ({ role, text })), 
-        {
-          model: proofExecutionDetails?.model ?? result.model,
-          depth: proofExecutionDetails?.depth ?? result.depth,
-        },
-        activeUri
+      const followUpResult = await sendFollowUpMessage(
+        followUpContext,
+        activeModel,
+        activeUri,
       );
-      const updatedFullHistory = [...updatedUserHistory, { role: 'model' as const, text: responseText }];
+      const updatedFullHistory = [
+        ...updatedUserHistory,
+        { role: 'model' as const, text: followUpResult.messageMarkdown },
+      ];
       setChatHistory(updatedFullHistory);
+
+      if (followUpResult.verdict) {
+        setResult((prev) => (prev ? { ...prev, verdict: followUpResult.verdict! } : prev));
+      }
+
       if (currentHistoryId) {
-        void updateHistoryEntry(currentHistoryId, { chatHistory: updatedFullHistory });
+        const updates: Partial<HistoryEntry> = { chatHistory: updatedFullHistory };
+        if (followUpResult.verdict) {
+          updates.verdict = followUpResult.verdict;
+        }
+        void updateHistoryEntry(currentHistoryId, updates);
       }
     } catch (e) {
       setError(toAppError(e));
