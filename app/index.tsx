@@ -138,7 +138,7 @@ export default function MainScreen() {
   } | null>(null);
 
   const insets = useSafeAreaInsets();
-  const [topBarHeight, setTopBarHeight] = useState(60);
+
   const [sheetHeaderHeight, setSheetHeaderHeight] = useState(50);
 
   const sheetKeyboardOffset = Platform.OS === 'ios' ? sheetHeaderHeight + insets.top : 0;
@@ -790,7 +790,7 @@ export default function MainScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.topBar} onLayout={(e) => setTopBarHeight(e.nativeEvent.layout.height)}>
+      <View style={styles.topBar}>
         <Text style={styles.title}>Scribe</Text>
         <View style={styles.topBarRight}>
           {result && (

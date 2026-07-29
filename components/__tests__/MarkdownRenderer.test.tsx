@@ -1,4 +1,4 @@
-import { normalizeFeedbackMarkdown } from '../MarkdownRenderer';
+import { normalizeFeedbackMarkdown, prepareFeedbackMarkdown } from '../MarkdownRenderer';
 
 describe('normalizeFeedbackMarkdown', () => {
   it('removes remote image directives while keeping text feedback', () => {
@@ -121,7 +121,7 @@ describe('normalizeFeedbackMarkdown', () => {
   });
 });
 
-import { prepareFeedbackMarkdown } from '../MarkdownRenderer';
+
 describe('prepareFeedbackMarkdown validation integration', () => {
   it('returns ok: false behaviour (escaping all math) when unbalanced $ is present', () => {
     const input = 'This has unbalanced $ math $ and $ more';

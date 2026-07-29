@@ -5,9 +5,8 @@ import {
   type File as GeminiFile,
   type Part,
 } from '@google/genai';
-import * as ExpoFile from 'expo-file-system';
 import { File as ExpoFileClass } from 'expo-file-system';
-import { GeminiModel, PedagogicalDepth } from '../models/types';
+import { GeminiModel } from '../models/types';
 import {
   type AppError,
   type FollowUpContext,

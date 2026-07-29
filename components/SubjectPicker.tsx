@@ -16,7 +16,6 @@ import { getSubjectsByCategory, getSubjectById, MATH_SUBJECTS } from '../models/
 import { MathSubject, SubjectCategory } from '../models/types';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
 import {
-  loadCustomSubjects,
   addCustomSubject,
   deleteCustomSubject,
   loadCustomCategories,
