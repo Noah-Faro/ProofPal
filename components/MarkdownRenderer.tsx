@@ -37,9 +37,6 @@ export function normalizeFeedbackMarkdown(content: string): string {
   // 4. Double-escape backslashes on the text ONLY
   let textWithEscapedBackslashes = placeholderText.replace(/\\/g, '\\\\');
 
-  // Escape stray curly braces outside math blocks
-  textWithEscapedBackslashes = textWithEscapedBackslashes.replace(/\{/g, '\\\\{').replace(/\}/g, '\\\\}');
-
   // 5. Restore math blocks without double-escaping them, and standardize on $ / $$
   return textWithEscapedBackslashes.replace(/___MATH_BLOCK_(\d+)___/g, (_, indexStr) => {
     const idx = parseInt(indexStr, 10);
@@ -77,8 +74,8 @@ export function prepareFeedbackMarkdown(markdown: string): string {
 
 const markdownStyle: MarkdownStyle = {
   paragraph: { color: COLORS.textPrimary, fontSize: FONT_SIZES.md, lineHeight: 24, marginBottom: SPACING.sm },
-  h1: { color: COLORS.primaryLight, fontSize: FONT_SIZES.xl, fontWeight: '700', marginTop: SPACING.md, marginBottom: SPACING.sm },
-  h2: { color: COLORS.primaryLight, fontSize: FONT_SIZES.lg, fontWeight: '700', marginTop: SPACING.md, marginBottom: SPACING.xs },
+  h1: { color: COLORS.textPrimary, fontSize: FONT_SIZES.xl, fontWeight: '700', marginTop: SPACING.md, marginBottom: SPACING.sm },
+  h2: { color: COLORS.textPrimary, fontSize: FONT_SIZES.lg, fontWeight: '700', marginTop: SPACING.md, marginBottom: SPACING.xs },
   h3: { color: COLORS.textPrimary, fontSize: FONT_SIZES.md, fontWeight: '700', marginTop: SPACING.sm, marginBottom: SPACING.xs },
   strong: { color: COLORS.textPrimary },
   em: { color: COLORS.textPrimary },

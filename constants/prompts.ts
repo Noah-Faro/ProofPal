@@ -21,7 +21,7 @@ export const MATH_MARKDOWN_CONTRACT = `
 - Never introduce unexplained variables. Never guess unreadable proof content.
 - Check mathematical conclusions, not only formatting.
 - CRITICAL JSON ESCAPING: You are generating a JSON payload containing LaTeX. JSON parsers interpret single backslashes combined with certain letters as control characters (e.g., \\n, \\t, \\r, \\b, \\f). Therefore, when writing LaTeX commands that start with these letters (e.g., \\ne, \\text, \\rho, \\beta), you MUST escape them with TWO backslashes in the JSON string (e.g., \\\\ne, \\\\text, \\\\rho, \\\\beta). However, do NOT double-escape actual formatting characters: use standard single backslashes for regular paragraph breaks (e.g., \\n).
-- Do not use Markdown formatting (like **bold** or _italic_) INSIDE LaTeX math blocks. If you want to bold math, use \\mathbf{}.
+- For regular text and prose, use standard Markdown (like **bold** or _italic_). Do NOT use LaTeX text formatting commands like \\textit or \\textbf outside of math blocks. Inside LaTeX math blocks, you may use \\mathbf{}, but do NOT use Markdown formatting.
 `;
 
 export const DEPTH_PROMPTS: Record<PedagogicalDepth, string> = {
