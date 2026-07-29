@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
 import { getSubjectById } from '../models/subjects';
 import { GeminiModel, AppSettings, PedagogicalDepth, HistoryEntry, MathSubject } from '../models/types';
 export { getApiScopeId, rotateApiScopeId, deleteApiScopeId } from '../services/secureStorage';
@@ -181,6 +182,18 @@ export function markOnboardingIncomplete(): Promise<AppSettings> {
 
 const MAX_HISTORY_ENTRIES = 100;
 
+async function persistImageAsync(uri: string): Promise<string> {
+  if (!uri.startsWith('file://')) return uri;
+  if (!FileSystem.documentDirectory) return uri;
+  if (uri.startsWith(FileSystem.documentDirectory)) return uri;
+  
+  const filename = uri.split('/').pop() || `image_${Date.now()}.jpg`;
+  const newUri = FileSystem.documentDirectory + filename;
+  
+  await FileSystem.copyAsync({ from: uri, to: newUri });
+  return newUri;
+}
+
 export async function loadHistory(): Promise<HistoryEntry[]> {
   try {
     const json = await AsyncStorage.getItem(HISTORY_KEY);
@@ -191,6 +204,14 @@ export async function loadHistory(): Promise<HistoryEntry[]> {
 }
 
 export async function saveHistoryEntry(entry: HistoryEntry): Promise<void> {
+  if (entry.chatHistory) {
+    for (const msg of entry.chatHistory) {
+      if (msg.imageUri) {
+        msg.imageUri = await persistImageAsync(msg.imageUri);
+      }
+    }
+  }
+
   const history = await loadHistory();
   history.unshift(entry);
   if (history.length > MAX_HISTORY_ENTRIES) history.length = MAX_HISTORY_ENTRIES;
@@ -198,6 +219,14 @@ export async function saveHistoryEntry(entry: HistoryEntry): Promise<void> {
 }
 
 export async function updateHistoryEntry(id: string, updates: Partial<HistoryEntry>): Promise<void> {
+  if (updates.chatHistory) {
+    for (const msg of updates.chatHistory) {
+      if (msg.imageUri) {
+        msg.imageUri = await persistImageAsync(msg.imageUri);
+      }
+    }
+  }
+
   const history = await loadHistory();
   const index = history.findIndex((entry) => entry.id === id);
   if (index !== -1) {
@@ -208,11 +237,30 @@ export async function updateHistoryEntry(id: string, updates: Partial<HistoryEnt
 
 
 export async function clearHistory(): Promise<void> {
+  const history = await loadHistory();
+  for (const entry of history) {
+    if (entry.chatHistory) {
+      for (const msg of entry.chatHistory) {
+        if (msg.imageUri && FileSystem.documentDirectory && msg.imageUri.startsWith(FileSystem.documentDirectory)) {
+          await FileSystem.deleteAsync(msg.imageUri, { idempotent: true });
+        }
+      }
+    }
+  }
   await AsyncStorage.removeItem(HISTORY_KEY);
 }
 
 export async function deleteHistoryEntry(id: string): Promise<void> {
   const history = await loadHistory();
+  const entryToDelete = history.find(entry => entry.id === id);
+  if (entryToDelete && entryToDelete.chatHistory) {
+    for (const msg of entryToDelete.chatHistory) {
+      if (msg.imageUri && FileSystem.documentDirectory && msg.imageUri.startsWith(FileSystem.documentDirectory)) {
+        await FileSystem.deleteAsync(msg.imageUri, { idempotent: true });
+      }
+    }
+  }
+
   const updated = history.filter(entry => entry.id !== id);
   await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
 }
