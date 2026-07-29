@@ -112,6 +112,12 @@ describe('normalizeFeedbackMarkdown', () => {
       expect(output).toBe('Limit: $x \\to \\infty$');
     });
 
+    it('allows single newlines inside inline math blocks (e.g. LLM hard-wrapping) without breaking extraction', () => {
+      const input = 'This is math: $m\n\\leq n$ and it continues.';
+      const output = normalizeFeedbackMarkdown(input);
+      expect(output).toBe('This is math: $m\n\\leq n$ and it continues.');
+    });
+
     it('gracefully handles markdown bolding asterisks inside math (which KaTeX will unfortunately render as asterisks)', () => {
       // Since Gemini's prompt forbids this, this test just proves our parser doesn't crash if it happens.
       const input = 'The variable is $**q**$';

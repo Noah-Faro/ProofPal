@@ -9,6 +9,11 @@ describe('validateFeedbackMarkdown', () => {
     }
   });
 
+  it('passes valid markdown with inline math spanning a single newline', () => {
+    const result = validateFeedbackMarkdown('Let $x \n = 5$ and $y = 10$.');
+    expect(result.ok).toBe(true);
+  });
+
   it('detects unbalanced math delimiters ($)', () => {
     const result = validateFeedbackMarkdown('The equation $x + y = 5 is incomplete.');
     expect(result.ok).toBe(false);

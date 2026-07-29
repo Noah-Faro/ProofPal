@@ -14,7 +14,7 @@ export function validateFeedbackMarkdown(markdown: string): MarkdownValidationRe
     errors.push({ code: 'LIMIT_EXCEEDED', message: 'Maximum Markdown message length (100,000 characters) exceeded.' });
   }
 
-  const mathBlocks = markdown.match(/(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|\\\[[\s\S]*?\\\]|\\\((?:[^\\\n]|\\(?!\)))*?\\\))/g) || [];
+  const mathBlocks = markdown.match(/(\$\$[\s\S]*?\$\$|\$(?:[^$\n]|\n(?!\n)){1,256}?\$|\\\[[\s\S]*?\\\]|\\\((?:[^\\\n]|\\(?!\)))*?\\\))/g) || [];
   if (mathBlocks.length > 256) {
     errors.push({ code: 'LIMIT_EXCEEDED', message: 'Maximum number of math spans (256) exceeded.' });
   }
@@ -40,7 +40,7 @@ export function validateFeedbackMarkdown(markdown: string): MarkdownValidationRe
   // 3. Check for bare math syntax in prose (naked ^ or _)
   // This is tricky. If we find ^ or _ OUTSIDE of a math block, it's an error.
   // We can strip math blocks first, then check what's left.
-  const stripped = markdown.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$)/g, '');
+  const stripped = markdown.replace(/(\$\$[\s\S]*?\$\$|\$(?:[^$\n]|\n(?!\n)){1,256}?\$)/g, '');
   if (/(?<!\\)[\^_]/.test(stripped)) {
     errors.push({ code: 'BARE_MATH_SYNTAX', message: 'Contains unescaped mathematical syntax (^ or _) outside of a math span.' });
   }

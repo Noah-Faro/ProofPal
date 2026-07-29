@@ -29,7 +29,7 @@ export function normalizeFeedbackMarkdown(content: string): string {
 
   // 3. Extract math blocks into placeholders to protect them
   const mathBlocks: string[] = [];
-  let placeholderText = cleaned.replace(/(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|\\\[[\s\S]*?\\\]|\\\((?:[^\\\n]|\\(?!\)))*?\\\))/g, (match) => {
+  let placeholderText = cleaned.replace(/(\$\$[\s\S]*?\$\$|\$(?:[^$\n]|\n(?!\n)){1,256}?\$|\\\[[\s\S]*?\\\]|\\\((?:[^\\\n]|\\(?!\)))*?\\\))/g, (match) => {
     mathBlocks.push(match);
     return `___MATH_BLOCK_${mathBlocks.length - 1}___`;
   });
