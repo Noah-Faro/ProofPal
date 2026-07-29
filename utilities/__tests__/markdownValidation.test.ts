@@ -14,6 +14,11 @@ describe('validateFeedbackMarkdown', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('allows markdown italics (_) outside of math blocks', () => {
+    const result = validateFeedbackMarkdown('This is _less than or equal to_ $n$.');
+    expect(result.ok).toBe(true);
+  });
+
   it('detects unbalanced math delimiters ($)', () => {
     const result = validateFeedbackMarkdown('The equation $x + y = 5 is incomplete.');
     expect(result.ok).toBe(false);

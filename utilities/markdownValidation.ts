@@ -37,11 +37,10 @@ export function validateFeedbackMarkdown(markdown: string): MarkdownValidationRe
     errors.push({ code: 'EMPTY_MATH_SPAN', message: 'Contains an empty math span.' });
   }
 
-  // 3. Check for bare math syntax in prose (naked ^ or _)
-  // This is tricky. If we find ^ or _ OUTSIDE of a math block, it's an error.
+  // 3. Check for bare math syntax in prose (naked ^ or explicit subscript like a_1)
   // We can strip math blocks first, then check what's left.
   const stripped = markdown.replace(/(\$\$[\s\S]*?\$\$|\$(?:[^$\n]|\n(?!\n)){1,256}?\$)/g, '');
-  if (/(?<!\\)[\^_]/.test(stripped)) {
+  if (/(?<!\\)\^/.test(stripped) || /[a-zA-Z0-9]_[a-zA-Z0-9]/.test(stripped)) {
     errors.push({ code: 'BARE_MATH_SYNTAX', message: 'Contains unescaped mathematical syntax (^ or _) outside of a math span.' });
   }
 
