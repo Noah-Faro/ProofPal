@@ -19,7 +19,8 @@ import {
   Alert,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { MarkdownRenderer, prepareFeedbackMarkdown } from '../components/MarkdownRenderer';
+import { MarkdownRenderer } from '../components/MarkdownRenderer';
+import { DebugModal } from '../components/DebugModal';
 import { Redirect, useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import { DropZone } from '../components/DropZone';
 import { DepthPicker } from '../components/DepthPicker';
@@ -128,7 +129,7 @@ export default function MainScreen() {
   const [chatImageUri, setChatImageUri] = useState<string | null>(null);
   const [fullScreenImageUri, setFullScreenImageUri] = useState<string | null>(null);
   const [customSubjects, setCustomSubjects] = useState<MathSubject[]>([]);
-  const [showDebugModal, setShowDebugModal] = useState(false);
+  const [debugContent, setDebugContent] = useState<string | null>(null);
 
   const [proofExecutionDetails, setProofExecutionDetails] = useState<{
     model: GeminiModel;
@@ -681,7 +682,7 @@ export default function MainScreen() {
               </Text>
             )}
             {result && (
-              <TouchableOpacity onPress={() => setShowDebugModal(true)} style={{ marginLeft: 8 }}>
+              <TouchableOpacity onPress={() => setDebugContent(result.feedbackMarkdown)} style={{ marginLeft: 8 }}>
                 <Text style={{ fontSize: 16 }}>🐞</Text>
               </TouchableOpacity>
             )}
@@ -709,7 +710,12 @@ export default function MainScreen() {
                   )}
                 </View>
               ) : (
-                <MarkdownRenderer content={msg.text} />
+                <View>
+                  <TouchableOpacity onPress={() => setDebugContent(msg.text)} style={{ alignSelf: 'flex-end', marginBottom: 4 }}>
+                    <Text style={{ fontSize: 14 }}>🐞</Text>
+                  </TouchableOpacity>
+                  <MarkdownRenderer content={msg.text} />
+                </View>
               )}
             </View>
           ))}
@@ -979,23 +985,11 @@ export default function MainScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
-      <Modal visible={showDebugModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowDebugModal(false)}>
-        <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bgDark }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: SPACING.md, borderBottomWidth: 1, borderColor: COLORS.bgSurface }}>
-            <Text style={{ fontSize: FONT_SIZES.lg, fontWeight: '700', color: COLORS.textPrimary }}>Debug Logs</Text>
-            <TouchableOpacity onPress={() => setShowDebugModal(false)}>
-              <Text style={{ fontSize: FONT_SIZES.md, color: COLORS.primaryLight }}>Close</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView style={{ flex: 1, padding: SPACING.md }}>
-            <Text style={{ fontSize: FONT_SIZES.md, fontWeight: '700', color: COLORS.textPrimary, marginBottom: SPACING.xs }}>Raw Gemini Output</Text>
-            <Text style={{ fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 12, color: COLORS.textSecondary, marginBottom: SPACING.lg }} selectable>{result?.feedbackMarkdown}</Text>
-            
-            <Text style={{ fontSize: FONT_SIZES.md, fontWeight: '700', color: COLORS.textPrimary, marginBottom: SPACING.xs }}>Post-Processed Output</Text>
-            <Text style={{ fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 12, color: COLORS.textSecondary, marginBottom: SPACING.xl }} selectable>{result?.feedbackMarkdown ? prepareFeedbackMarkdown(result.feedbackMarkdown) : ''}</Text>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
+      <DebugModal 
+        visible={debugContent !== null} 
+        content={debugContent} 
+        onClose={() => setDebugContent(null)} 
+      />
     </SafeAreaView>
   );
 }

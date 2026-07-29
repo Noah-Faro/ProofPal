@@ -4,11 +4,13 @@ import { useRouter } from 'expo-router';
 
 import { loadHistory, clearHistory, deleteHistoryEntry } from '../utilities/settings';
 import { HistoryEntry } from '../models/types';
+import { DebugModal } from '../components/DebugModal';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS } from '../constants/theme';
 
 export default function HistoryScreen() {
   const router = useRouter();
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [debugContent, setDebugContent] = useState<string | null>(null);
 
   useEffect(() => {
     loadHistory().then(setHistory).catch(console.error);
@@ -82,8 +84,14 @@ export default function HistoryScreen() {
               <Text style={styles.badgeText}>{item.verdict ? item.verdict.toUpperCase() : 'REVIEWED'}</Text>
             </View>
             <TouchableOpacity 
+              onPress={() => setDebugContent(item.feedbackMarkdown)} 
+              style={styles.actionIcon}
+            >
+              <Text style={{fontSize: 18}}>🐞</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
               onPress={() => handleDeleteItem(item.id)} 
-              style={styles.deleteIcon}
+              style={styles.actionIcon}
             >
               <Text style={{color: COLORS.error, fontSize: 18}}>✕</Text>
             </TouchableOpacity>
@@ -128,6 +136,11 @@ export default function HistoryScreen() {
           contentContainerStyle={styles.listContent}
         />
       )}
+      <DebugModal 
+        visible={debugContent !== null} 
+        content={debugContent} 
+        onClose={() => setDebugContent(null)} 
+      />
     </SafeAreaView>
   );
 }
@@ -205,7 +218,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  deleteIcon: {
+  actionIcon: {
     marginLeft: SPACING.md,
     padding: 4,
   },
