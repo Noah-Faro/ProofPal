@@ -95,6 +95,30 @@ describe('normalizeFeedbackMarkdown', () => {
     const input = 'Outside ||norm|| and ... vs inside: $||v||$ and $a ... b$';
     expect(normalizeFeedbackMarkdown(input)).toBe('Outside ||norm|| and ... vs inside: $\\lVert v \\rVert$ and $a \\dots b$');
   });
+
+  describe('Post-JSON-Parsing Guardrail Simulation', () => {
+    it('handles correctly double-escaped LaTeX strings without mangling (e.g. \\ne, \\times)', () => {
+      // Simulating the result of JSON.parse('{"text": "m \\\\ne n and a \\\\times b"}')
+      // In JS memory, this is the string literal 'm \\ne n and a \\times b'
+      const input = 'Math: $m \\ne n$ and $a \\times b$';
+      const output = normalizeFeedbackMarkdown(input);
+      expect(output).toBe('Math: $m \\ne n$ and $a \\times b$');
+    });
+
+    it('handles correctly double-escaped \\to without aggressive replacement', () => {
+      // Simulating JSON.parse('{"text": "$x \\\\to \\\\infty$"}')
+      const input = 'Limit: $x \\to \\infty$';
+      const output = normalizeFeedbackMarkdown(input);
+      expect(output).toBe('Limit: $x \\to \\infty$');
+    });
+
+    it('gracefully handles markdown bolding asterisks inside math (which KaTeX will unfortunately render as asterisks)', () => {
+      // Since Gemini's prompt forbids this, this test just proves our parser doesn't crash if it happens.
+      const input = 'The variable is $**q**$';
+      const output = normalizeFeedbackMarkdown(input);
+      expect(output).toBe('The variable is $**q**$');
+    });
+  });
 });
 
 import { prepareFeedbackMarkdown } from '../MarkdownRenderer';
