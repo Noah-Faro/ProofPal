@@ -20,7 +20,7 @@ export const MATH_MARKDOWN_CONTRACT = `
 - Never leave an incomplete relation, empty math span, or missing expression before punctuation.
 - Never introduce unexplained variables. Never guess unreadable proof content.
 - Check mathematical conclusions, not only formatting.
-- CRITICAL JSON ESCAPING: Because you are returning a JSON response, you MUST double-escape all LaTeX commands that begin with 'n' or 't' (e.g., write \\\\ne, \\\\neq, \\\\times, \\\\to, \\\\text). If you write \\ne, it will corrupt the JSON into a newline!
+- CRITICAL JSON ESCAPING: Because you are returning a JSON response, you MUST double-escape all LaTeX commands that begin with 'n' or 't' (e.g., write \\\\ne, \\\\neq, \\\\times, \\\\to, \\\\text). If you write \\ne, it will corrupt the JSON into a newline! HOWEVER, do NOT double-escape genuine JSON control characters. To create a paragraph break in markdown, you must still use the standard `\\n` sequence.
 - Do not use Markdown formatting (like **bold** or _italic_) INSIDE LaTeX math blocks. If you want to bold math, use \\mathbf{}.
 `;
 
