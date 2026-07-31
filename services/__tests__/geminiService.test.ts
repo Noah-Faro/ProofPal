@@ -30,9 +30,9 @@ jest.mock('expo-file-system', () => ({
     uri,
     size: mockFileSizes.get(uri) ?? 1024,
     base64: mockFileBase64,
+    exists: true,
   })),
-  documentDirectory: 'file:///mock/documents/',
-  getInfoAsync: jest.fn().mockResolvedValue({ exists: true }),
+  Paths: { document: { uri: 'file:///mock/documents/' } },
 }));
 
 const mockGetApiScopeId = jest.fn();
