@@ -181,9 +181,31 @@ export async function checkProof(request: ProofCheckRequest): Promise<ProofCheck
         },
       });
 
-    let response;
+    const executeGenerateCallWithRetry = async () => {
+      let attempts = 0;
+      const maxAttempts = 3;
+      while (attempts < maxAttempts) {
+        try {
+          return await generateCall();
+        } catch (genError: any) {
+          attempts++;
+          const errStr = String(genError?.message || genError).toLowerCase();
+          const is404 = errStr.includes('404') || errStr.includes('not found') || genError?.status === 404;
+          
+          if (is404 && attempts < maxAttempts) {
+            console.warn(`Got 404 on attempt ${attempts}. Waiting 2s to allow PDF propagation...`);
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            continue;
+          }
+          throw genError;
+        }
+      }
+    };
+
+    let response!: any;
+    request.onStageChange?.('evaluating');
     try {
-      response = await generateCall();
+      response = await executeGenerateCallWithRetry();
     } catch (genError: any) {
       const errStr = String(genError?.message || genError).toLowerCase();
       const is404 = errStr.includes('404') || errStr.includes('not found') || genError?.status === 404;
@@ -211,7 +233,7 @@ export async function checkProof(request: ProofCheckRequest): Promise<ProofCheck
           parts.push(createPartFromUri(uploadedPdf.uri, uploadedPdf.mimeType));
         }
         request.onStageChange?.('evaluating');
-        response = await generateCall();
+        response = await executeGenerateCallWithRetry();
       } else {
         throw genError;
       }

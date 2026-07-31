@@ -31,7 +31,7 @@ describe('normalizeFeedbackMarkdown', () => {
   it('handles double backslashes in math blocks without double escaping', () => {
     const input = 'Matrix: $$ \\begin{matrix} 1 & 2 \\\\ 3 & 4 \\end{matrix} $$';
     const output = normalizeFeedbackMarkdown(input);
-    expect(output).toBe('Matrix: $$ \\begin{matrix} 1 & 2 \\\\ 3 & 4 \\end{matrix} $$');
+    expect(output).toBe('Matrix: $ \\begin{matrix} 1 & 2 \\\\ 3 & 4 \\end{matrix} $');
   });
 
   it('inserts spaces into squashed LaTeX commands', () => {

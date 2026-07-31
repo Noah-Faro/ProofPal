@@ -13,6 +13,7 @@ export const BASE_SYSTEM_PROMPT = `You are Scribe, an expert mathematics tutor.
 export const MATH_MARKDOWN_CONTRACT = `
 ## MATHEMATICAL MARKDOWN CONTRACT
 - Every mathematical symbol and expression MUST be inside $...$ or $$...$$.
+- NEVER use $$...$$ inside a paragraph or sentence. Display math ($$ ... $$) MUST be placed on its own line, separated by blank lines.
 - An entire relation belongs in one span (e.g., $n \\leq m$).
 - Use valid commands: \\leq, \\geq, \\neq, \\cdot, \\dots, \\alpha, \\beta, \\theta, \\sum, \\int, \\frac, \\lim, \\subset, \\in, \\cup, \\cap, \\to, \\rightarrow, \\Rightarrow, \\{ \\}, \\lVert \\rVert.
 - Never emit bare ^, _, LaTeX commands, <=, >=, !=, or || in prose.

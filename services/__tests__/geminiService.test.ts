@@ -201,6 +201,8 @@ describe('checkProof', () => {
     jest.useFakeTimers();
     mockGenerateContent
       .mockRejectedValueOnce(new Error('404 File not found'))
+      .mockRejectedValueOnce(new Error('404 File not found'))
+      .mockRejectedValueOnce(new Error('404 File not found'))
       .mockResolvedValueOnce({ text: JSON.stringify({ verdict: 'correct', feedbackMarkdown: 'Retry succeeded.' }) });
 
     mockUpload.mockResolvedValue({ name: 'files/fresh', state: 'PROCESSING' });
@@ -229,7 +231,7 @@ describe('checkProof', () => {
     await jest.advanceTimersByTimeAsync(10_000);
     await expect(pending).resolves.toMatchObject({ verdict: 'correct', remotePdfName: 'files/fresh' });
 
-    expect(mockGenerateContent).toHaveBeenCalledTimes(2);
+    expect(mockGenerateContent).toHaveBeenCalledTimes(4);
     expect(mockUpload).toHaveBeenCalled();
     jest.useRealTimers();
   });

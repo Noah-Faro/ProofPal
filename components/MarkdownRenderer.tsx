@@ -27,12 +27,39 @@ export function normalizeFeedbackMarkdown(content: string): string {
     return line;
   }).join('\n');
 
+
+
   // 3. Extract math blocks into placeholders to protect them
   const mathBlocks: string[] = [];
   let placeholderText = cleaned.replace(/(\$\$[\s\S]*?\$\$|\$(?:[^$\n]|\n(?!\n)){1,256}?\$|\\\[[\s\S]*?\\\]|\\\((?:[^\\\n]|\\(?!\)))*?\\\))/g, (match) => {
     mathBlocks.push(match);
     return `___MATH_BLOCK_${mathBlocks.length - 1}___`;
   });
+
+  // 3.5. Convert inline $$...$$ to $...$ based on line context
+  const lines = placeholderText.split('\n');
+  for (let line of lines) {
+    const textWithoutPlaceholders = line.replace(/___MATH_BLOCK_\d+___/g, '').trim();
+    
+    // Check if the line has non-structural text, making it an inline context
+    const isInlineContext = textWithoutPlaceholders.length > 0 && 
+                            !/^[-*+>]\s*$/.test(textWithoutPlaceholders) && 
+                            !/^\d+\.\s*$/.test(textWithoutPlaceholders);
+                            
+    if (isInlineContext) {
+      const matches = line.match(/___MATH_BLOCK_(\d+)___/g);
+      if (matches) {
+        for (const match of matches) {
+          const idxStr = match.replace(/[^\d]/g, '');
+          const idx = parseInt(idxStr, 10);
+          const block = mathBlocks[idx];
+          if (block && block.startsWith('$$') && block.endsWith('$$')) {
+            mathBlocks[idx] = '$' + block.slice(2, -2) + '$';
+          }
+        }
+      }
+    }
+  }
 
   // 4. Double-escape backslashes on the text ONLY
   let textWithEscapedBackslashes = placeholderText.replace(/\\/g, '\\\\');

@@ -609,8 +609,8 @@ export default function MainScreen() {
     } catch (caught) {
       const nextError = toAppError(caught);
       if (controller.signal.aborted || nextError.code === 'CANCELLED') return;
-      
-      if (nextError.code === 'FILE_EXPIRED' && snapshot.exerciseContext.coursePdf?.bookId) {
+      const wasCached = !!snapshot.exerciseContext.coursePdf?.remoteName;
+      if (nextError.code === 'FILE_EXPIRED' && snapshot.exerciseContext.coursePdf?.bookId && wasCached) {
         // Wipe local cache
         void updateLibraryBook(snapshot.exerciseContext.coursePdf.bookId, {
           remotePdfName: undefined,
