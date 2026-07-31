@@ -61,7 +61,10 @@ export function normalizeFeedbackMarkdown(content: string): string {
     }
   }
 
-  // 4. Double-escape backslashes on the text ONLY
+  // 4. Unescape literal line breaks and tabs that Gemini might output
+  placeholderText = placeholderText.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+
+  // 4.5 Double-escape backslashes on the text ONLY
   let textWithEscapedBackslashes = placeholderText.replace(/\\/g, '\\\\');
 
   // 5. Restore math blocks without double-escaping them, and standardize on $ / $$

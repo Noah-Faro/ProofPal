@@ -5,7 +5,7 @@ import {
   type File as GeminiFile,
   type Part,
 } from '@google/genai';
-import { File as ExpoFileClass } from 'expo-file-system';
+import { File as ExpoFileClass, documentDirectory, getInfoAsync } from 'expo-file-system';
 import { GeminiModel } from '../models/types';
 import {
   type AppError,
@@ -284,7 +284,19 @@ async function uploadAndProcessPdf(
   assertPdfAttachment(attachment);
   assertNotAborted(signal);
 
-  const localFile = new ExpoFileClass(attachment.uri);
+  // Auto-correct stale URIs (Expo UUIDs change on update)
+  let fileUri = attachment.uri;
+  if (fileUri.includes('Documents/book_') && documentDirectory) {
+    const filename = fileUri.substring(fileUri.indexOf('Documents/book_') + 10); // get "book_..."
+    fileUri = documentDirectory + filename;
+  }
+
+  const fileInfo = await getInfoAsync(fileUri);
+  if (!fileInfo.exists) {
+    throw new ProofPalError('FILE_NOT_FOUND', 'Scribe could not find the file on your device. It may have been deleted outside the app. Please delete this book from your library and re-upload the PDF.', false);
+  }
+
+  const localFile = new ExpoFileClass(fileUri);
   const fileSize = attachment.size ?? localFile.size;
   if (fileSize > MAX_PDF_BYTES) {
     throw new ProofPalError('FILE_TOO_LARGE', 'Course PDFs must be 50 MB or smaller.', false);
