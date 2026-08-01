@@ -61,8 +61,9 @@ export function normalizeFeedbackMarkdown(content: string): string {
     }
   }
 
-  // 4. Unescape literal line breaks and tabs that Gemini might output
-  placeholderText = placeholderText.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+  // 4. Unescape literal line breaks that Gemini might output, but avoid breaking LaTeX commands starting with 'n'.
+  // We ignore known commands: \newline, \noindent, \normalfont, \normalsize, \nabla, \nu, \notin, \nexists, \ne, \nearrow, \nwarrow
+  placeholderText = placeholderText.replace(/\\n(?!ewline|oindent|ormal|abla|u\b|otin|exists|e\b|earrow|warrow)/g, '\n');
 
   // 4.5 Double-escape backslashes on the text ONLY
   let textWithEscapedBackslashes = placeholderText.replace(/\\/g, '\\\\');
